@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getChapter } from '@/lib/corpus';
+import { getBooks, getChapter } from '@/lib/corpus';
 import { Reader } from '@/components/Reader';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export default async function ReadPage({
   const chapterNumber = Number(params.chapter);
   if (!Number.isInteger(chapterNumber) || chapterNumber < 1) notFound();
 
-  const chapter = await getChapter(osis, chapterNumber);
+  const [chapter, books] = await Promise.all([getChapter(osis, chapterNumber), getBooks()]);
   if (!chapter || chapter.verses.length === 0) {
     return (
       <main className="mx-auto w-full max-w-3xl px-4 py-8">
@@ -28,5 +28,5 @@ export default async function ReadPage({
     );
   }
 
-  return <Reader chapter={chapter} />;
+  return <Reader chapter={chapter} books={books} />;
 }

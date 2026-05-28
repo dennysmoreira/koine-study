@@ -2,9 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import type { Chapter, Token, Verse } from '@/lib/corpus';
+import { useRouter } from 'next/navigation';
+import type { Book, Chapter, Token, Verse } from '@/lib/corpus';
 import { glossLabel, parsingLabel, posLabel } from '@/lib/morph-labels';
 import { phoneticPtBR, transliterate } from '@/lib/transliterate';
+
+const TESTAMENT_LABELS: Record<string, string> = {
+  NT: 'Novo Testamento',
+  OT: 'Antigo Testamento',
+};
 
 // Áudio via Web Speech API (nativa, sem dependência).
 // - Se houver voz grega (`el-*`) instalada, fala o grego — fonética moderna
@@ -76,13 +82,20 @@ function VerseBlock({
   verse,
   onSelect,
   activeKey,
+  highlighted,
 }: {
   verse: Verse;
   onSelect: (t: Token) => void;
   activeKey: string | null;
+  highlighted: boolean;
 }) {
   return (
-    <div className="mb-4">
+    <div
+      id={`v${verse.verse}`}
+      className={`mb-4 scroll-mt-20 rounded-md transition-colors duration-500 ${
+        highlighted ? 'bg-amber-50 dark:bg-amber-900/20' : ''
+      }`}
+    >
       <div className="flex flex-wrap items-start gap-x-1 gap-y-2">
         <span className="mt-1.5 select-none text-xs font-semibold text-neutral-400">
           {verse.verse}
@@ -170,14 +183,120 @@ function TokenSheet({ token, onClose }: { token: Token; onClose: () => void }) {
   );
 }
 
-export function Reader({ chapter }: { chapter: Chapter }) {
+// Navegador livro → capítulo → versículo. Trocar de livro/capítulo navega para
+// outra rota (busca novo corpus no servidor); o versículo apenas rola a página
+// atual, já que todos os versículos do capítulo já estão renderizados.
+function NavSheet({
+  books,
+  current,
+  chapter,
+  chapters,
+  verses,
+  onClose,
+  onVerse,
+}: {
+  books: Book[];
+  current: Book;
+  chapter: number;
+  chapters: number[];
+  verses: Verse[];
+  onClose: () => void;
+  onVerse: (verse: number) => void;
+}) {
+  const router = useRouter();
+  const groups = new Map<string, Book[]>();
+  for (const b of books) {
+    const list = groups.get(b.testament) ?? [];
+    list.push(b);
+    groups.set(b.testament, list);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        aria-label="Fechar"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40"
+      />
+      <div className="relative max-h-[80dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-8 shadow-xl dark:bg-neutral-900">
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+
+        <label htmlFor="nav-book" className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+          Livro
+        </label>
+        <select
+          id="nav-book"
+          value={current.osis_code}
+          onChange={(e) => router.push(`/read/${e.target.value}/1`)}
+          className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-800"
+        >
+          {[...groups.entries()].map(([testament, list]) => (
+            <optgroup key={testament} label={TESTAMENT_LABELS[testament] ?? testament}>
+              {list.map((b) => (
+                <option key={b.id} value={b.osis_code}>
+                  {b.name_pt}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+
+        <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Capítulo</p>
+        <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
+          {chapters.map((n) => (
+            <Link
+              key={n}
+              href={`/read/${current.osis_code}/${n}`}
+              onClick={onClose}
+              className={`flex h-9 items-center justify-center rounded-md text-sm transition ${
+                n === chapter
+                  ? 'bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100'
+                  : 'bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700'
+              }`}
+            >
+              {n}
+            </Link>
+          ))}
+        </div>
+
+        <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Versículo</p>
+        <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
+          {verses.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => onVerse(v.verse)}
+              className="flex h-9 items-center justify-center rounded-md bg-neutral-100 text-sm transition hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+            >
+              {v.verse}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function Reader({ chapter, books }: { chapter: Chapter; books: Book[] }) {
   const { book, number, verses, chapters } = chapter;
   const [selected, setSelected] = useState<{ verse: number; token: Token } | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const [highlight, setHighlight] = useState<number | null>(null);
 
   const idx = chapters.indexOf(number);
   const prev = idx > 0 ? chapters[idx - 1] : null;
   const next = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null;
   const activeKey = selected ? `${selected.verse}:${selected.token.position}` : null;
+
+  const goToVerse = (verse: number) => {
+    setNavOpen(false);
+    setHighlight(verse);
+    requestAnimationFrame(() => {
+      document.getElementById(`v${verse}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    window.setTimeout(() => setHighlight((cur) => (cur === verse ? null : cur)), 2000);
+  };
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -185,9 +304,27 @@ export function Reader({ chapter }: { chapter: Chapter }) {
         <Link href="/" className="text-sm text-neutral-500 hover:underline">
           ← Início
         </Link>
-        <h1 className="text-sm font-semibold">
+        <button
+          type="button"
+          onClick={() => setNavOpen(true)}
+          className="flex items-center gap-1 text-sm font-semibold transition hover:text-neutral-600 dark:hover:text-neutral-300"
+          aria-label="Selecionar livro, capítulo e versículo"
+        >
           {book.name_pt} {number}
-        </h1>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="h-4 w-4 text-neutral-400"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
         <div className="flex gap-3 text-sm">
           {prev != null ? (
             <Link href={`/read/${book.osis_code}/${prev}`} className="text-neutral-500 hover:underline">
@@ -212,10 +349,23 @@ export function Reader({ chapter }: { chapter: Chapter }) {
             key={verse.id}
             verse={verse}
             activeKey={activeKey}
+            highlighted={highlight === verse.verse}
             onSelect={(token) => setSelected({ verse: verse.verse, token })}
           />
         ))}
       </main>
+
+      {navOpen && (
+        <NavSheet
+          books={books}
+          current={book}
+          chapter={number}
+          chapters={chapters}
+          verses={verses}
+          onClose={() => setNavOpen(false)}
+          onVerse={goToVerse}
+        />
+      )}
 
       {selected && <TokenSheet token={selected.token} onClose={() => setSelected(null)} />}
     </div>
