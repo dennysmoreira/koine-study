@@ -13,3 +13,5 @@ next-env.d.ts
 # Fontes baixadas e artefatos de ingestão (recriáveis via npm run ingest:download)
 data/sources/
 data/build/
+
+.vercel
