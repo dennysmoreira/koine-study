@@ -1,0 +1,47 @@
+{
+  "name": "koine-study",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Plataforma de estudo de grego koiné para exegese bíblica (SaaS, mobile-first PWA).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "ingest": "tsx scripts/ingest/index.ts",
+    "ingest:download": "tsx scripts/ingest/index.ts --step=download",
+    "ingest:build": "tsx scripts/ingest/index.ts --step=build",
+    "ingest:translate": "tsx scripts/ingest/index.ts --step=translate",
+    "ingest:load": "tsx scripts/ingest/index.ts --step=load",
+    "morph:test": "tsx scripts/ingest/morph-decoder.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.0",
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "server-only": "^0.0.1",
+    "ts-fsrs": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.15",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

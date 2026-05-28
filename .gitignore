@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+
+# Next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Fontes baixadas e artefatos de ingestão (recriáveis via npm run ingest:download)
+data/sources/
+data/build/
