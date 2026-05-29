@@ -27,12 +27,12 @@ import { parse } from 'csv-parse/sync';
 import { createClient } from '@supabase/supabase-js';
 import { decodeMorph } from './morph-decoder.ts';
 import { BOOKS, normalizeStrongs } from './books.ts';
-import { translate, translateLexicon, localizeRefs } from './translate.ts';
+import { translate, translateLexicon, translateLexiconEntries, localizeRefs } from './translate.ts';
 import { parseAbbottSmith } from './abbott-smith.ts';
 import { parseDodson } from './dodson.ts';
 import { downloadMacula, buildMacula } from './macula.ts';
 import { reloadMacula } from './reload.ts';
-import { insertBatched } from './supabase-io.ts';
+import { insertBatched, lemmaIdsByStrongs } from './supabase-io.ts';
 import { parseTflsj } from './stepbible-lsj.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -352,21 +352,8 @@ async function loadLexicons(): Promise<void> {
 
   const client = createClient(url, key, { auth: { persistSession: false } });
 
-  // strongs -> [lemma_id...] do corpus (paginado: ~9k lemas excedem o limite default)
-  const byStrongs = new Map<string, number[]>();
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await client
-      .from('lemmas').select('id,strongs').order('id').range(from, from + PAGE - 1);
-    if (error) throw new Error(`ler lemmas: ${error.message}`);
-    const rows = (data ?? []) as Array<{ id: number; strongs: string | null }>;
-    for (const r of rows) {
-      if (!r.strongs) continue;
-      const arr = byStrongs.get(r.strongs);
-      if (arr) arr.push(r.id); else byStrongs.set(r.strongs, [r.id]);
-    }
-    if (rows.length < PAGE) break;
-  }
+  // strongs -> [lemma_id...] do corpus (homógrafos: um Strong's mapeia vários lemas)
+  const byStrongs = await lemmaIdsByStrongs(client);
 
   const entries: LexiconEntryBuild[] = JSON.parse(readFileSync(path, 'utf8'));
   const rows: Row[] = [];
@@ -407,6 +394,7 @@ async function main(): Promise<void> {
   if (step === 'reload-macula') return void (await reloadMacula(BUILD, process.argv.includes('--confirm')));
   if (step === 'translate') return void (await translate(BUILD));
   if (step === 'translate-lexicon') return void (await translateLexicon(BUILD, Number(arg('limit') ?? 0)));
+  if (step === 'translate-lsj') return void (await translateLexiconEntries(BUILD, Number(arg('limit') ?? 0)));
   if (step === 'localize-refs') return void (await localizeRefs(BUILD));
   if (step === 'load') return void (await load());
   if (step === 'lexicon') return void (await lexicon());

@@ -20,6 +20,7 @@
     "ingest:reload-macula": "tsx scripts/ingest/index.ts --step=reload-macula",
     "ingest:translate": "tsx scripts/ingest/index.ts --step=translate",
     "ingest:translate-lexicon": "tsx scripts/ingest/index.ts --step=translate-lexicon",
+    "ingest:translate-lsj": "tsx scripts/ingest/index.ts --step=translate-lsj",
     "ingest:load": "tsx scripts/ingest/index.ts --step=load",
     "ingest:lexicon": "tsx scripts/ingest/index.ts --step=lexicon",
     "ingest:download-stepbible": "tsx scripts/ingest/index.ts --step=download-stepbible",

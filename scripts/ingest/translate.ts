@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+import { lemmaIdsByStrongs } from './supabase-io.ts';
 
 interface LemmaRow {
   id: number;
@@ -29,11 +30,18 @@ interface LemmaRow {
   frequency: number;
 }
 
+interface LexiconEntryRow { strongs: string; source: string; text_en: string; sort_order: number }
+
 type TranslateFn = (texts: string[]) => Promise<string[]>;
 interface Translator { name: string; model: string; fn: TranslateFn }
 
 const BATCH = Number(process.env.TRANSLATE_BATCH ?? 100); // lotes maiores = menos requisições (útil no free tier de 20 req/dia)
 const LEXICON_BATCH = Number(process.env.TRANSLATE_LEXICON_BATCH ?? 10); // Abbott-Smith: entradas longas -> lotes menores p/ não estourar o output
+// LSJ: entradas variam de ~200B a ~16KB. Lote por conta de caracteres (não de
+// itens), senão um punhado de entradas longas estoura o output do modelo (Anthropic
+// max_tokens=8192). Orçamento conservador (~4k chars de ENTRADA por lote) deixa
+// folga p/ a saída PT, normalmente maior que o original.
+const LSJ_CHARS = Number(process.env.TRANSLATE_LSJ_CHARS ?? 4000);
 const UPDATE_CONCURRENCY = 8;
 const SLEEP_MS = Number(process.env.TRANSLATE_SLEEP_MS ?? 7000); // ~8,5 req/min: respeita o free tier do Gemini 2.5-flash (10 RPM)
 
@@ -89,6 +97,28 @@ function buildLexiconPrompt(texts: string[]): string {
     '- Mantenha abreviações gramaticais naturais em PT quando claras (ex.: "c. dat." → "c. dat.", "prep" → "prep.").',
     '- Mantenha o estilo de dicionário (conciso); preserve a ordem e a pontuação estrutural da entrada.',
     '- Não adicione comentários, títulos nem numeração.',
+    '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
+    '',
+    'Entrada:',
+    JSON.stringify(texts),
+  ].join('\n');
+}
+
+// entradas LSJ (STEPBible TFLSJ): texto longo com grego clássico, marcadores de
+// sentido (__1, __II, __b), referências de autores antigos e quebras de linha
+// estruturais. Traduz só o texto explicativo, preservando tudo o que dá estrutura.
+function buildLsjPrompt(texts: string[]): string {
+  return [
+    'Você é um tradutor especializado no léxico grego clássico/koiné Liddell-Scott-Jones (LSJ).',
+    'Traduza para português (PT-BR) cada ENTRADA lexical do array JSON a seguir.',
+    'Regras OBRIGATÓRIAS:',
+    '- Preserve EXATAMENTE todo o texto em grego (não translitere, não traduza as palavras gregas).',
+    '- Preserve EXATAMENTE os marcadores de estrutura/sentido como aparecem (ex.: "__1", "__II", "__b", "A.", "II.").',
+    '- Preserve as quebras de linha (\\n) na MESMA posição: a estrutura da entrada depende delas.',
+    '- Preserve referências a autores e obras antigas e referências bíblicas como estão (ex.: "Hom.", "Il.9.5", "Lk 7:37").',
+    '- Traduza apenas o texto explicativo em inglês: definições, descrições gramaticais e notas.',
+    '- Mantenha o estilo de dicionário (conciso); não expanda nem resuma.',
+    '- Não adicione comentários, títulos nem numeração própria.',
     '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
     '',
     'Entrada:',
@@ -333,6 +363,121 @@ export async function translateLexicon(buildDir: string, limit?: number): Promis
   });
   process.stdout.write(`\r  aplicados no banco: ${applied}/${entries.length}\n`);
   console.log('Abbott-Smith PT aplicado ao Supabase.');
+}
+
+/**
+ * Traduz as entradas LSJ (EN -> PT-BR) e aplica em public.lexicon_entries.text_pt
+ * (source='lsj'). Espelha translateLexicon mas com:
+ *   - prompt específico de LSJ (preserva grego, marcadores de sentido e quebras);
+ *   - lotes por ORÇAMENTO DE CARACTERES (LSJ_CHARS) — entradas variam 200B–16KB,
+ *     então lote por contagem fixa estouraria o output do modelo;
+ *   - cache resumível próprio em data/build/lsj.pt.json (Strong's -> texto PT).
+ *
+ * O cache é a ÚNICA fonte de resumabilidade: a etapa de apply relê o cache, não o
+ * banco. Apagar lsj.pt.json força re-traduzir o corpus inteiro (~5,6k entradas =
+ * dias de free tier). Preserve-o entre execuções; é git-ignorado (data/build/).
+ *
+ * Entrada: data/build/lexicon-entries.json (source='lsj') + lemmas.json (frequência,
+ * para priorizar as palavras mais comuns do NT em runs --limit). Aplica resolvendo
+ * Strong's -> lemma_id(s) contra o corpus carregado (homógrafos: fan-out p/ vários ids).
+ */
+export async function translateLexiconEntries(buildDir: string, limit?: number): Promise<void> {
+  const entriesPath = join(buildDir, 'lexicon-entries.json');
+  const lemmasPath = join(buildDir, 'lemmas.json');
+  if (!existsSync(entriesPath)) throw new Error('rode `npm run ingest:build-lexicons` primeiro');
+  if (!existsSync(lemmasPath)) throw new Error('rode `npm run ingest:build` primeiro');
+  const cachePath = join(buildDir, 'lsj.pt.json');
+
+  const entries: LexiconEntryRow[] = JSON.parse(readFileSync(entriesPath, 'utf8'));
+  const lemmas: LemmaRow[] = JSON.parse(readFileSync(lemmasPath, 'utf8'));
+  const done: Record<string, string> = existsSync(cachePath)
+    ? JSON.parse(readFileSync(cachePath, 'utf8'))
+    : {};
+
+  // frequência por Strong's (do corpus do NT) p/ priorizar as palavras mais comuns.
+  const freq = new Map<string, number>();
+  for (const l of lemmas) if (l.strongs) freq.set(l.strongs, (freq.get(l.strongs) ?? 0) + l.frequency);
+
+  // só LSJ usadas no NT (frequency>0), com texto EN, ainda não traduzidas.
+  // Ordena por frequência desc: em runs --limit, prioriza o vocabulário do NT.
+  let pending = entries
+    .filter((e) => e.source === 'lsj' && e.text_en && (freq.get(e.strongs) ?? 0) > 0 && !(e.strongs in done))
+    .sort((a, b) => (freq.get(b.strongs) ?? 0) - (freq.get(a.strongs) ?? 0));
+  if (limit && limit > 0) pending = pending.slice(0, limit);
+  console.log(`entradas LSJ a traduzir: ${pending.length} (em cache: ${Object.keys(done).length})`);
+
+  if (pending.length > 0) {
+    const { name, model, fn } = getTranslator(buildLsjPrompt);
+    console.log(`provider: ${name} (${model}), orçamento=${LSJ_CHARS} chars/lote, intervalo=${SLEEP_MS}ms`);
+    // lotes por orçamento de caracteres. Invariante: um lote só ultrapassa LSJ_CHARS
+    // quando contém UMA única entrada que sozinha já excede o orçamento (inevitável).
+    // O guard explícito de "entrada grande sozinha" garante isso: sem ele, uma entrada
+    // de 16KB poderia ancorar um lote e ainda receber a próxima, dobrando o input.
+    const batches: LexiconEntryRow[][] = [];
+    let cur: LexiconEntryRow[] = [];
+    let curChars = 0;
+    for (const e of pending) {
+      const len = e.text_en.length;
+      if (cur.length > 0 && curChars + len > LSJ_CHARS) { batches.push(cur); cur = []; curChars = 0; }
+      if (len > LSJ_CHARS) { batches.push([e]); continue; } // maior que o orçamento -> lote próprio
+      cur.push(e);
+      curChars += len;
+    }
+    if (cur.length > 0) batches.push(cur);
+
+    try {
+      let translated = 0;
+      for (let b = 0; b < batches.length; b++) {
+        const chunk = batches[b]!;
+        const inputs = chunk.map((e) => e.text_en);
+        let out: string[] | undefined;
+        for (let r = 0; r < 3; r++) {
+          try { out = await fn(inputs); break; }
+          catch (e) {
+            if (r === 2) throw e;
+            process.stdout.write(`\n  lote ${b} inválido (${(e as Error).message}); re-tentando ${r + 1}/2\n`);
+            await sleep(2000);
+          }
+        }
+        // não cacheia vazios: ficam pendentes p/ re-tentar na próxima execução (auto-recuperável)
+        chunk.forEach((e, j) => { const t = out![j]; if (t) done[e.strongs] = t; });
+        writeFileSync(cachePath, JSON.stringify(done), 'utf8'); // checkpoint por lote
+        translated += chunk.length;
+        process.stdout.write(`\r  traduzidos: ${translated}/${pending.length}`);
+        if (b + 1 < batches.length && SLEEP_MS > 0) await sleep(SLEEP_MS);
+      }
+      process.stdout.write('\n');
+    } catch (e) {
+      process.stdout.write('\n');
+      console.warn(`tradução interrompida: ${(e as Error).message}`);
+      console.warn(`progresso salvo no cache: ${Object.keys(done).length} entradas. Reexecute para retomar.`);
+    }
+  }
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.log(`SUPABASE_* ausentes: ${Object.keys(done).length} traduções salvas em lsj.pt.json (não aplicadas ao banco).`);
+    return;
+  }
+
+  // aplica text_pt por Strong's -> lemma_id(s), source='lsj' (idempotente); concorrência limitada
+  const client = createClient(url, key, { auth: { persistSession: false } });
+  const byStrongs = await lemmaIdsByStrongs(client);
+  const cached = Object.entries(done).filter(([, text]) => text); // pula vazios
+  let applied = 0;
+  let noLemma = 0;
+  await pMap(cached, UPDATE_CONCURRENCY, async ([strongs, text]) => {
+    const ids = byStrongs.get(strongs);
+    if (!ids) { noLemma++; return; }
+    const { error } = await (client.from('lexicon_entries') as any)
+      .update({ text_pt: text }).in('lemma_id', ids).eq('source', 'lsj');
+    if (error) throw new Error(`update lexicon_entries ${strongs}: ${error.message}`);
+    if (++applied % 100 === 0) process.stdout.write(`\r  aplicados no banco: ${applied}/${cached.length}`);
+  });
+  process.stdout.write(`\r  aplicados no banco: ${applied}/${cached.length}\n`);
+  if (noLemma > 0) console.warn(`AVISO: ${noLemma} Strong's sem lema no corpus (cache à frente do load?)`);
+  console.log('LSJ PT aplicado a public.lexicon_entries.');
 }
 
 // ── localize-refs: abreviações de livros EN -> PT (Almeida) ──────────────

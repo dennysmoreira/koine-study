@@ -1,6 +1,6 @@
 # ADR-001 — Pivot do corpus para MACULA Greek (SBLGNT) + stack de léxicos em camadas
 
-- **Status:** Concluído (Fases A–G + I concluídas; H — tradução PT da LSJ — adiada como opcional)
+- **Status:** Concluído (Fases A–I concluídas; H — tradução PT da LSJ — com infra pronta e validada, run completo opcional sob orçamento de LLM)
 - **Data:** 2026-05-29
 - **Decisores:** Dennys
 - **Escopo:** koine-study (corpus, ETL, schema, leitor, dados de usuário)
@@ -148,10 +148,17 @@ usuário precisam de tratamento:
    (não removido). Justificativa: o atributo `morph` do MACULA É o formato Robinson/Tauber que `decodeMorph` parseia;
    manter um único vocabulário morfológico consistente alimenta `morph-labels.ts` + o quiz de parsing sem diferença
    para o usuário e com menos risco. Data Cache do Next limpo (`.next/cache`).
-8. **Fase H — Tradução PT da LSJ (adiada, opcional).** Reusar `translate.ts` (provider abstration +
-   checkpoint resumível) sobre `lexicon_entries.text_pt`. Adiada pelo volume (10k entradas, custo de LLM);
-   a coluna `text_pt` está pronta e o leitor já renderiza `text_pt ?? text_en`, então pode ser feita
-   incrementalmente/sob demanda sem mudança de código. Thayer's/Moulton-Milligan idem (nem ingeridos ainda).
+8. **Fase H — Tradução PT da LSJ (infra pronta + validada).** Novo passo `translate-lsj`
+   (`translateLexiconEntries` em `translate.ts`) reusa a abstração de provider + checkpoint resumível e
+   aplica em `lexicon_entries.text_pt` (source='lsj'). Diferenças vs. Abbott-Smith: lote por **orçamento de
+   caracteres** (`TRANSLATE_LSJ_CHARS`, default 4k) — entradas variam 200B–16KB, lote por contagem fixa
+   estouraria o output do modelo; prompt LSJ que preserva grego, marcadores de sentido (`__1/__II/__b`) e
+   quebras de linha; priorização por frequência no NT (runs `--limit` traduzem primeiro o vocabulário mais
+   comum); apply por Strong's→lemma_id(s) (fan-out de homógrafos). Helper `lemmaIdsByStrongs` extraído para
+   `supabase-io.ts` (DRY com `loadLexicons`). Smoke-test (`--limit=3`): G3588/G2532/G846 traduzidos e
+   aplicados (καί atualizou as 2 linhas de homógrafo). O run completo (~5,6k entradas NT) fica a critério do
+   orçamento de LLM; idempotente/resumível (cache `data/build/lsj.pt.json`), o leitor já renderiza
+   `text_pt ?? text_en`. Thayer's/Moulton-Milligan idem (nem ingeridos ainda).
 9. **Fase I — Verificação.** Build/typecheck, preview MCP (mobile), conferir θεός com texto crítico + 4 léxicos,
    conferir que o SRS preservou progresso (contagem de cards antes/depois).
 
@@ -177,8 +184,9 @@ usuário precisam de tratamento:
 (Strong's + lema) destrava 4 léxicos pela mesma fonte; licenças todas compatíveis com app gratuito.
 
 **Negativas / custos:** re-ETL completo; migração de dados de usuário (mitigada pelo bridge de Strong's);
-atribuições a exibir (SBLGNT, MACULA, STEPBible). Tradução PT da LSJ adiada (volume grande; coluna
-`text_pt` pronta, pode ser feita sob demanda/incremental). `quiz_attempts` perde o vínculo posicional
+atribuições a exibir (SBLGNT, MACULA, STEPBible). Tradução PT da LSJ tem infra pronta (passo `translate-lsj`)
+mas o run completo (~5,6k entradas) custa LLM/tempo — opcional/incremental; o leitor já cai em `text_en`
+enquanto `text_pt` não existe. `quiz_attempts` perde o vínculo posicional
 com tokens (aceito — é log).
 
 **Riscos:** divergência textual Byzantine↔SBLGNT pode orfanar poucos cards SRS (logado, não-bloqueante).

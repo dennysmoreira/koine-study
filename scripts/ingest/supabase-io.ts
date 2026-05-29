@@ -28,3 +28,27 @@ export async function deleteAll(client: any, table: string): Promise<void> {
   if (error) throw new Error(`delete ${table}: ${error.message}`);
   console.log(`  ${table}: limpo`);
 }
+
+/**
+ * Mapa `strongs -> [lemma_id...]` do corpus carregado. Paginado porque ~9k lemas
+ * excedem o limite default do PostgREST. Um Strong's pode mapear vários lemas
+ * (homógrafos), daí o array. Usado para resolver chaves estáveis (Strong's) aos
+ * ids sintéticos voláteis de `lemmas` ao aplicar léxicos em `lexicon_entries`.
+ */
+export async function lemmaIdsByStrongs(client: any): Promise<Map<string, number[]>> {
+  const byStrongs = new Map<string, number[]>();
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await client
+      .from('lemmas').select('id,strongs').order('id').range(from, from + PAGE - 1);
+    if (error) throw new Error(`ler lemmas: ${error.message}`);
+    const rows = (data ?? []) as Array<{ id: number; strongs: string | null }>;
+    for (const r of rows) {
+      if (!r.strongs) continue;
+      const arr = byStrongs.get(r.strongs);
+      if (arr) arr.push(r.id); else byStrongs.set(r.strongs, [r.id]);
+    }
+    if (rows.length < PAGE) break;
+  }
+  return byStrongs;
+}
