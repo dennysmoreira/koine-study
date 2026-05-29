@@ -1,15 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { Book, Chapter, Token, Verse } from '@/lib/corpus';
+import type { Book, Chapter, LexiconEntry, Token, Verse } from '@/lib/corpus';
 import { glossLabel, parsingLabel, posLabel } from '@/lib/morph-labels';
 import { phoneticPtBR, transliterate } from '@/lib/transliterate';
+import { fetchLexicon } from '@/app/read/actions';
 
 const TESTAMENT_LABELS: Record<string, string> = {
   NT: 'Novo Testamento',
   OT: 'Antigo Testamento',
+};
+
+// Rótulos legíveis por fonte de léxico (coluna `lexicon_entries.source`).
+const LEXICON_LABELS: Record<string, string> = {
+  lsj: 'LSJ (Liddell-Scott-Jones)',
+  thayers: "Thayer's",
+  moulton_milligan: 'Moulton-Milligan',
 };
 
 // Áudio via Web Speech API (nativa, sem dependência).
@@ -115,6 +123,36 @@ function VerseBlock({
 
 function TokenSheet({ token, onClose }: { token: Token; onClose: () => void }) {
   const gloss = glossLabel(token);
+  const strongs = token.lemma?.strongs ?? null;
+  const [lexicon, setLexicon] = useState<LexiconEntry[] | null>(null);
+  const [lexLoading, setLexLoading] = useState(false);
+
+  // Busca as entradas de léxico (LSJ etc.) sob demanda ao abrir o painel. Não
+  // viajam no payload do capítulo (entradas grandes). `ignore` evita aplicar o
+  // resultado de um token anterior caso o usuário troque de token rapidamente.
+  useEffect(() => {
+    if (!strongs) {
+      setLexicon([]);
+      return;
+    }
+    let ignore = false;
+    setLexLoading(true);
+    setLexicon(null);
+    fetchLexicon(strongs)
+      .then((entries) => {
+        if (!ignore) setLexicon(entries);
+      })
+      .catch(() => {
+        if (!ignore) setLexicon([]);
+      })
+      .finally(() => {
+        if (!ignore) setLexLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [strongs]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
       <button
@@ -178,6 +216,51 @@ function TokenSheet({ token, onClose }: { token: Token; onClose: () => void }) {
             </>
           )}
         </dl>
+
+        {token.lemma?.abbott_smith && (
+          <section className="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+              Abbott-Smith
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+              {token.lemma.abbott_smith}
+            </p>
+          </section>
+        )}
+
+        {lexLoading && (
+          <p className="mt-5 border-t border-neutral-200 pt-4 text-sm text-neutral-400 dark:border-neutral-800">
+            Carregando léxico…
+          </p>
+        )}
+
+        {lexicon?.map((entry) => (
+          <section
+            key={entry.source}
+            className="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800"
+          >
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+              {LEXICON_LABELS[entry.source] ?? entry.source.toUpperCase()}
+            </h3>
+            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+              {entry.text_pt ?? entry.text_en}
+            </p>
+            {entry.source === 'lsj' && (
+              <p className="mt-2 text-[11px] text-neutral-400">
+                LSJ via{' '}
+                <a
+                  href="https://github.com/STEPBible/STEPBible-Data"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-neutral-600 dark:hover:text-neutral-300"
+                >
+                  STEPBible
+                </a>{' '}
+                (CC BY 4.0)
+              </p>
+            )}
+          </section>
+        ))}
       </div>
     </div>
   );
@@ -353,6 +436,7 @@ export function Reader({ chapter, books }: { chapter: Chapter; books: Book[] }) 
             onSelect={(token) => setSelected({ verse: verse.verse, token })}
           />
         ))}
+        <Attributions />
       </main>
 
       {navOpen && (
@@ -369,5 +453,44 @@ export function Reader({ chapter, books }: { chapter: Chapter; books: Book[] }) 
 
       {selected && <TokenSheet token={selected.token} onClose={() => setSelected(null)} />}
     </div>
+  );
+}
+
+// Atribuições de fonte: SBLGNT (texto) e MACULA Greek (dados linguísticos, CC BY 4.0)
+// exigem crédito legal; léxicos Abbott-Smith/Dodson são de domínio público.
+function Attributions() {
+  return (
+    <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs leading-relaxed text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
+      <p>
+        Texto grego:{' '}
+        <a
+          href="https://sblgnt.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-neutral-600 dark:hover:text-neutral-300"
+        >
+          SBLGNT
+        </a>{' '}
+        · Dados linguísticos:{' '}
+        <a
+          href="https://github.com/Clear-Bible/macula-greek"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-neutral-600 dark:hover:text-neutral-300"
+        >
+          MACULA Greek
+        </a>{' '}
+        (
+        <a
+          href="https://creativecommons.org/licenses/by/4.0/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-neutral-600 dark:hover:text-neutral-300"
+        >
+          CC BY 4.0
+        </a>
+        ) · Léxico: Abbott-Smith e Dodson (domínio público)
+      </p>
+    </footer>
   );
 }

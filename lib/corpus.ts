@@ -15,6 +15,7 @@ export interface Lemma {
   gloss_pt: string | null;
   gloss_en: string | null;
   strongs: string | null;
+  abbott_smith: string | null;
 }
 
 export interface Token {
@@ -51,7 +52,7 @@ export interface Chapter {
 }
 
 const TOKEN_COLUMNS =
-  'position,surface,normalized,strongs,morph_code,m_pos,m_tense,m_voice,m_mood,m_case,m_number,m_gender,m_person,gloss_context,lemmas(lemma,gloss_pt,gloss_en,strongs)';
+  'position,surface,normalized,strongs,morph_code,m_pos,m_tense,m_voice,m_mood,m_case,m_number,m_gender,m_person,gloss_context,lemmas(lemma,gloss_pt,gloss_en,strongs,abbott_smith)';
 
 // O corpus (livros, versículos, tokens, léxico) é imutável — só muda quando o ETL
 // reingere os dados. Por isso cacheamos as leituras no Data Cache do Next por meio
@@ -134,3 +135,43 @@ async function fetchChapter(
 }
 
 export const getChapter = unstable_cache(fetchChapter, ['corpus:chapter'], CORPUS_CACHE);
+
+// ── stack de léxicos (lexicon_entries) ──────────────────────────────────
+// Entradas longas (LSJ etc.) NÃO viajam no payload do capítulo — seriam centenas
+// de KB por capítulo. São buscadas sob demanda quando o leitor abre o painel de um
+// token, chaveadas pelo Strong's do lema (estável entre rebuilds).
+export interface LexiconEntry {
+  source: string; // 'lsj' | 'thayers' | ...
+  text_en: string | null;
+  text_pt: string | null;
+}
+
+async function fetchLexiconEntries(strongs: string): Promise<LexiconEntry[]> {
+  // Cardinalidade: por Strong's existe UMA entrada lógica por `source` (ex.: 'lsj').
+  // Homógrafos (vários lemas no mesmo Strong's) fazem o load replicar a MESMA entrada
+  // por lemma_id; logo várias linhas chegam com (source, texto) idênticos. `sort_order`
+  // ordena as fontes ENTRE si (display), não partes dentro de uma fonte. Por isso:
+  // deduplicamos por source mantendo a 1ª. O `.order('source')` secundário torna o
+  // "1ª" determinístico entre rebuilds de cache (sem ele a ordem dentro do mesmo
+  // sort_order seria a do Postgres, não garantida).
+  const { data, error } = await supabase
+    .from('lexicon_entries')
+    .select('source,text_en,text_pt,sort_order,lemmas!inner(strongs)')
+    .eq('lemmas.strongs', strongs)
+    .order('sort_order')
+    .order('source');
+  if (error) throw new Error(`getLexiconEntries: ${error.message}`);
+
+  const seen = new Set<string>();
+  const out: LexiconEntry[] = [];
+  for (const r of (data ?? []) as Array<LexiconEntry & { sort_order: number }>) {
+    if (seen.has(r.source)) continue;
+    // Sem texto (EN e PT nulos) não há o que mostrar — não emite seção vazia.
+    if (!r.text_pt && !r.text_en) continue;
+    seen.add(r.source);
+    out.push({ source: r.source, text_en: r.text_en, text_pt: r.text_pt });
+  }
+  return out;
+}
+
+export const getLexiconEntries = unstable_cache(fetchLexiconEntries, ['corpus:lexicon'], CORPUS_CACHE);

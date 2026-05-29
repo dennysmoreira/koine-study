@@ -2,8 +2,8 @@
  * Passo `translate` da ingestão: traduz as glosas do léxico EN -> PT (PT-BR).
  *
  * Lê data/build/lemmas.json, traduz gloss_en -> gloss_pt em lote via LLM e:
- *   1. salva um cache resumível em data/build/lemmas.pt.json (id -> gloss_pt);
- *   2. aplica gloss_pt em public.lemmas no Supabase (se SUPABASE_* presentes).
+ *   1. salva um cache resumível em data/build/lemmas.pt.json (Strong's -> gloss_pt);
+ *   2. aplica gloss_pt em public.lemmas no Supabase, por Strong's (se SUPABASE_* presentes).
  *
  * Provider configurável por TRANSLATE_PROVIDER (gemini | anthropic).
  *   - gemini    -> camada gratuita (https://aistudio.google.com/apikey); GEMINI_API_KEY
@@ -11,6 +11,10 @@
  *
  * É idempotente e resumível: lemas já no cache são pulados; o cache é gravado
  * a cada lote, então uma interrupção (rate limit, queda) não perde progresso.
+ *
+ * Execute os passos de tradução SERIALMENTE (um --step por vez). translate-lexicon
+ * e localize-refs ambos escrevem lemmas.abbott_smith por Strong's; rodá-los em
+ * paralelo pode fazer uma escrita obsoleta sobrescrever uma mais nova.
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -19,7 +23,9 @@ import { createClient } from '@supabase/supabase-js';
 
 interface LemmaRow {
   id: number;
+  strongs: string | null;
   gloss_en: string | null;
+  abbott_smith: string | null;
   frequency: number;
 }
 
@@ -27,6 +33,7 @@ type TranslateFn = (texts: string[]) => Promise<string[]>;
 interface Translator { name: string; model: string; fn: TranslateFn }
 
 const BATCH = Number(process.env.TRANSLATE_BATCH ?? 100); // lotes maiores = menos requisições (útil no free tier de 20 req/dia)
+const LEXICON_BATCH = Number(process.env.TRANSLATE_LEXICON_BATCH ?? 10); // Abbott-Smith: entradas longas -> lotes menores p/ não estourar o output
 const UPDATE_CONCURRENCY = 8;
 const SLEEP_MS = Number(process.env.TRANSLATE_SLEEP_MS ?? 7000); // ~8,5 req/min: respeita o free tier do Gemini 2.5-flash (10 RPM)
 
@@ -51,7 +58,10 @@ async function requestWithRetry(doFetch: () => Promise<Response>, label: string,
   }
 }
 
-// ── prompt e parsing (compartilhados entre providers) ───────────────────
+// ── prompts e parsing (compartilhados entre providers) ──────────────────
+type PromptBuilder = (texts: string[]) => string;
+
+// glosas curtas (Dodson): tradução concisa estilo dicionário
 function buildPrompt(texts: string[]): string {
   return [
     'Você é um tradutor especializado em léxico de grego koiné bíblico.',
@@ -59,6 +69,26 @@ function buildPrompt(texts: string[]): string {
     'Regras:',
     '- Preserve o sentido lexical/teológico e mantenha conciso (estilo de dicionário).',
     '- Não adicione explicações, comentários nem numeração.',
+    '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
+    '',
+    'Entrada:',
+    JSON.stringify(texts),
+  ].join('\n');
+}
+
+// entradas longas (Abbott-Smith): traduz só o texto explicativo, preservando
+// grego, hebraico, referências bíblicas e a estrutura da entrada.
+function buildLexiconPrompt(texts: string[]): string {
+  return [
+    'Você é um tradutor especializado em léxicos de grego koiné bíblico (Abbott-Smith).',
+    'Traduza para português (PT-BR) cada ENTRADA lexical do array JSON a seguir.',
+    'Regras OBRIGATÓRIAS:',
+    '- Preserve EXATAMENTE todo o texto em grego e hebraico (não translitere, não traduza as palavras gregas/hebraicas).',
+    '- Preserve referências bíblicas e versículos como estão (ex.: "Lk 7:37", "Mt 3:7", "al.").',
+    '- Traduza apenas o texto explicativo em inglês: definições, descrições gramaticais e notas.',
+    '- Mantenha abreviações gramaticais naturais em PT quando claras (ex.: "c. dat." → "c. dat.", "prep" → "prep.").',
+    '- Mantenha o estilo de dicionário (conciso); preserve a ordem e a pontuação estrutural da entrada.',
+    '- Não adicione comentários, títulos nem numeração.',
     '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
     '',
     'Entrada:',
@@ -91,11 +121,16 @@ function parseArray(text: string, expected: number): string[] {
   if (!Array.isArray(arr) || arr.length !== expected) {
     throw new Error(`resposta inesperada: ${Array.isArray(arr) ? `${arr.length} itens` : 'não é array'} (esperado ${expected})`);
   }
-  return arr.map((x) => String(x).trim());
+  // rejeita elementos não-string (null/objeto) — String(x) viraria "null"/"[object Object]"
+  // e seria persistido como "tradução". Força re-tentativa do lote.
+  return arr.map((x, i) => {
+    if (typeof x !== 'string') throw new Error(`elemento ${i} não é string (${typeof x})`);
+    return x.trim();
+  });
 }
 
 // ── providers ───────────────────────────────────────────────────────────
-function makeGemini(): Translator {
+function makeGemini(prompt: PromptBuilder): Translator {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('defina GEMINI_API_KEY no .env (grátis em https://aistudio.google.com/apikey)');
   const model = process.env.TRANSLATE_MODEL || 'gemini-2.5-flash';
@@ -105,8 +140,9 @@ function makeGemini(): Translator {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: buildPrompt(texts) }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0, thinkingConfig: { thinkingBudget: 0 } },
+        contents: [{ parts: [{ text: prompt(texts) }] }],
+        // maxOutputTokens alto evita truncar lotes de entradas longas (Abbott-Smith)
+        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 65536, thinkingConfig: { thinkingBudget: 0 } },
       }),
     }), 'Gemini');
     const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -116,7 +152,7 @@ function makeGemini(): Translator {
   return { name: 'gemini', model, fn };
 }
 
-function makeAnthropic(): Translator {
+function makeAnthropic(prompt: PromptBuilder): Translator {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('defina ANTHROPIC_API_KEY no .env');
   const model = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
@@ -124,7 +160,7 @@ function makeAnthropic(): Translator {
     const res = await requestWithRetry(() => fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model, max_tokens: 4096, messages: [{ role: 'user', content: buildPrompt(texts) }] }),
+      body: JSON.stringify({ model, max_tokens: 8192, messages: [{ role: 'user', content: prompt(texts) }] }),
     }), 'Anthropic');
     const data = (await res.json()) as { content?: Array<{ text?: string }> };
     const text = data.content?.[0]?.text ?? '';
@@ -133,10 +169,10 @@ function makeAnthropic(): Translator {
   return { name: 'anthropic', model, fn };
 }
 
-function getTranslator(): Translator {
+function getTranslator(prompt: PromptBuilder): Translator {
   const provider = (process.env.TRANSLATE_PROVIDER ?? 'gemini').toLowerCase();
-  if (provider === 'gemini') return makeGemini();
-  if (provider === 'anthropic') return makeAnthropic();
+  if (provider === 'gemini') return makeGemini(prompt);
+  if (provider === 'anthropic') return makeAnthropic(prompt);
   throw new Error(`TRANSLATE_PROVIDER inválido: "${provider}" (use gemini | anthropic)`);
 }
 
@@ -162,12 +198,13 @@ export async function translate(buildDir: string): Promise<void> {
     ? JSON.parse(readFileSync(cachePath, 'utf8'))
     : {};
 
-  // só lemas usados no corpus (frequency>0), com glosa EN, ainda não traduzidos
-  const pending = lemmas.filter((l) => l.frequency > 0 && l.gloss_en && !(String(l.id) in done));
+  // só lemas usados no corpus (frequency>0), com glosa EN e Strong's, ainda não traduzidos.
+  // Chave de cache = Strong's (estável entre rebuilds); lemmas.id é identity volátil.
+  const pending = lemmas.filter((l) => l.frequency > 0 && l.gloss_en && l.strongs && !(l.strongs in done));
   console.log(`lemmas a traduzir: ${pending.length} (em cache: ${Object.keys(done).length})`);
 
   if (pending.length > 0) {
-    const { name, model, fn } = getTranslator();
+    const { name, model, fn } = getTranslator(buildPrompt);
     console.log(`provider: ${name} (${model}), lote=${BATCH}, intervalo=${SLEEP_MS}ms`);
     try {
       for (let i = 0; i < pending.length; i += BATCH) {
@@ -182,7 +219,8 @@ export async function translate(buildDir: string): Promise<void> {
             await sleep(2000);
           }
         }
-        chunk.forEach((l, j) => { done[String(l.id)] = out![j] ?? ''; });
+        // não cacheia vazios: ficam pendentes p/ re-tentar na próxima execução (auto-recuperável)
+        chunk.forEach((l, j) => { const t = out![j]; if (t) done[l.strongs as string] = t; });
         writeFileSync(cachePath, JSON.stringify(done), 'utf8'); // checkpoint por lote
         process.stdout.write(`\r  traduzidos: ${Math.min(i + BATCH, pending.length)}/${pending.length}`);
         if (i + BATCH < pending.length && SLEEP_MS > 0) await sleep(SLEEP_MS);
@@ -204,15 +242,162 @@ export async function translate(buildDir: string): Promise<void> {
     return;
   }
 
-  // aplica gloss_pt por id (UPDATE é idempotente); concorrência limitada
+  // aplica gloss_pt por Strong's (UPDATE idempotente, sobrevive a rebuilds); concorrência limitada
   const client = createClient(url, key, { auth: { persistSession: false } });
-  const entries = Object.entries(done);
+  const entries = Object.entries(done).filter(([, gloss]) => gloss); // pula traduções vazias
   let applied = 0;
-  await pMap(entries, UPDATE_CONCURRENCY, async ([id, gloss]) => {
-    const { error } = await (client.from('lemmas') as any).update({ gloss_pt: gloss }).eq('id', Number(id));
-    if (error) throw new Error(`update lemma ${id}: ${error.message}`);
+  await pMap(entries, UPDATE_CONCURRENCY, async ([strongs, gloss]) => {
+    const { error } = await (client.from('lemmas') as any).update({ gloss_pt: gloss }).eq('strongs', strongs);
+    if (error) throw new Error(`update lemma ${strongs}: ${error.message}`);
     if (++applied % 100 === 0) process.stdout.write(`\r  aplicados no banco: ${applied}/${entries.length}`);
   });
   process.stdout.write(`\r  aplicados no banco: ${applied}/${entries.length}\n`);
   console.log('glosas PT aplicadas ao Supabase.');
+}
+
+/**
+ * Traduz as entradas do léxico Abbott-Smith (EN -> PT-BR) e SOBRESCREVE a coluna
+ * abbott_smith no Supabase. Espelha translate() mas com:
+ *   - prompt específico de léxico (preserva grego/hebraico/referências);
+ *   - lotes menores (entradas longas);
+ *   - cache resumível próprio em data/build/abbott.pt.json (Strong's -> texto PT).
+ *
+ * Idempotente/resumível: lemas já no cache são pulados; reexecuta a partir do
+ * cache (interrupção por cota diária não perde progresso). A entrada vem do
+ * abbott_smith (EN) de lemmas.json, então rode após `ingest:build`.
+ */
+export async function translateLexicon(buildDir: string, limit?: number): Promise<void> {
+  const srcPath = join(buildDir, 'lemmas.json');
+  if (!existsSync(srcPath)) throw new Error('rode `npm run ingest:build` primeiro');
+  const cachePath = join(buildDir, 'abbott.pt.json');
+
+  const lemmas: LemmaRow[] = JSON.parse(readFileSync(srcPath, 'utf8'));
+  const done: Record<string, string> = existsSync(cachePath)
+    ? JSON.parse(readFileSync(cachePath, 'utf8'))
+    : {};
+
+  // só lemas usados no corpus (frequency>0), com entrada Abbott-Smith, não traduzidos.
+  // Ordena por frequência desc para, em runs limitados (--limit), priorizar as
+  // palavras mais comuns do NT. limit>0 corta o lote desta execução (útil no free tier).
+  let pending = lemmas
+    .filter((l) => l.frequency > 0 && l.abbott_smith && l.strongs && !(l.strongs in done))
+    .sort((a, b) => b.frequency - a.frequency);
+  if (limit && limit > 0) pending = pending.slice(0, limit);
+  console.log(`entradas Abbott-Smith a traduzir: ${pending.length} (em cache: ${Object.keys(done).length})`);
+
+  if (pending.length > 0) {
+    const { name, model, fn } = getTranslator(buildLexiconPrompt);
+    console.log(`provider: ${name} (${model}), lote=${LEXICON_BATCH}, intervalo=${SLEEP_MS}ms`);
+    try {
+      for (let i = 0; i < pending.length; i += LEXICON_BATCH) {
+        const chunk = pending.slice(i, i + LEXICON_BATCH);
+        const inputs = chunk.map((l) => l.abbott_smith as string);
+        let out: string[] | undefined;
+        for (let r = 0; r < 3; r++) {
+          try { out = await fn(inputs); break; }
+          catch (e) {
+            if (r === 2) throw e;
+            process.stdout.write(`\n  lote @${i} inválido (${(e as Error).message}); re-tentando ${r + 1}/2\n`);
+            await sleep(2000);
+          }
+        }
+        // não cacheia vazios: ficam pendentes p/ re-tentar na próxima execução (auto-recuperável)
+        chunk.forEach((l, j) => { const t = out![j]; if (t) done[l.strongs as string] = t; });
+        writeFileSync(cachePath, JSON.stringify(done), 'utf8'); // checkpoint por lote
+        process.stdout.write(`\r  traduzidos: ${Math.min(i + LEXICON_BATCH, pending.length)}/${pending.length}`);
+        if (i + LEXICON_BATCH < pending.length && SLEEP_MS > 0) await sleep(SLEEP_MS);
+      }
+      process.stdout.write('\n');
+    } catch (e) {
+      process.stdout.write('\n');
+      console.warn(`tradução interrompida: ${(e as Error).message}`);
+      console.warn(`progresso salvo no cache: ${Object.keys(done).length} de ${Object.keys(done).length + pending.length} entradas. Reexecute para retomar.`);
+    }
+  }
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.log(`SUPABASE_* ausentes: ${Object.keys(done).length} traduções salvas em abbott.pt.json (não aplicadas ao banco).`);
+    return;
+  }
+
+  // sobrescreve abbott_smith por Strong's (UPDATE idempotente, sobrevive a rebuilds); concorrência limitada
+  const client = createClient(url, key, { auth: { persistSession: false } });
+  const entries = Object.entries(done).filter(([, text]) => text); // pula traduções vazias
+  let applied = 0;
+  await pMap(entries, UPDATE_CONCURRENCY, async ([strongs, text]) => {
+    const { error } = await (client.from('lemmas') as any).update({ abbott_smith: text }).eq('strongs', strongs);
+    if (error) throw new Error(`update lemma ${strongs}: ${error.message}`);
+    if (++applied % 100 === 0) process.stdout.write(`\r  aplicados no banco: ${applied}/${entries.length}`);
+  });
+  process.stdout.write(`\r  aplicados no banco: ${applied}/${entries.length}\n`);
+  console.log('Abbott-Smith PT aplicado ao Supabase.');
+}
+
+// ── localize-refs: abreviações de livros EN -> PT (Almeida) ──────────────
+// O prompt de tradução instrui a "preservar referências bíblicas exatamente",
+// então o LLM manteve as abreviações inglesas (Mk, Lk, Ac...). Esta etapa
+// determinística normaliza só os livros do NT cujo mapeamento é inequívoco.
+//
+// Idempotente e reexecutável: a regex casa o token de livro apenas quando
+// seguido de referência (cap:vers ou cap.vers), então após Mk->Mc não resta
+// nenhum "Mk" para recasar. Aplica no cache abbott.pt.json E no Supabase, por
+// Strong's, mantendo as duas fontes em sincronia.
+//
+// Só NT inequívoco. Livros do AT/LXX ficam de fora por ambiguidade de colisão
+// na convenção PT (ex.: He pode ser Hebreus; Es/Ki/Ca são ambíguos).
+const NT_BOOK_MAP: Record<string, string> = {
+  Mk: 'Mc', Lk: 'Lc', Ac: 'At', Ro: 'Rm', Ga: 'Gl', Eph: 'Ef',
+  Phl: 'Fp', Col: 'Cl', Ja: 'Tg', Re: 'Ap', He: 'Hb', Th: 'Ts',
+  Ti: 'Tm', Tit: 'Tt', Phm: 'Fm',
+};
+
+// regexes compiladas uma vez (não por chamada): ordena por comprimento desc para
+// "Tit" casar antes de "Ti". \b<livro>\b + lookahead ".?␠+dígito[:.]dígito" (cap:vers).
+const LOCALIZE_RULES: Array<{ re: RegExp; pt: string }> = Object.entries(NT_BOOK_MAP)
+  .sort((a, b) => b[0].length - a[0].length)
+  .map(([en, pt]) => ({ re: new RegExp(`\\b${en}\\b(?=\\.?\\s+\\d+[:.]\\d)`, 'g'), pt }));
+
+function localizeRefsText(text: string): string {
+  let out = text;
+  for (const { re, pt } of LOCALIZE_RULES) out = out.replace(re, pt);
+  return out;
+}
+
+export async function localizeRefs(buildDir: string): Promise<void> {
+  const cachePath = join(buildDir, 'abbott.pt.json');
+  if (!existsSync(cachePath)) throw new Error('rode `--step=translate-lexicon` primeiro (abbott.pt.json ausente)');
+  const done: Record<string, string> = JSON.parse(readFileSync(cachePath, 'utf8'));
+
+  // só reescreve (cache + banco) as entradas que de fato mudaram
+  const changed: Array<[string, string]> = [];
+  for (const [id, text] of Object.entries(done)) {
+    const next = localizeRefsText(text);
+    if (next !== text) {
+      done[id] = next;
+      changed.push([id, next]);
+    }
+  }
+  console.log(`entradas com referências localizadas: ${changed.length} de ${Object.keys(done).length}`);
+  if (changed.length === 0) { console.log('nada a fazer (já localizado).'); return; }
+
+  writeFileSync(cachePath, JSON.stringify(done), 'utf8'); // mantém o cache em sincronia
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.log(`SUPABASE_* ausentes: ${changed.length} entradas atualizadas no cache (não aplicadas ao banco).`);
+    return;
+  }
+
+  const client = createClient(url, key, { auth: { persistSession: false } });
+  let applied = 0;
+  await pMap(changed, UPDATE_CONCURRENCY, async ([strongs, text]) => {
+    const { error } = await (client.from('lemmas') as any).update({ abbott_smith: text }).eq('strongs', strongs);
+    if (error) throw new Error(`update lemma ${strongs}: ${error.message}`);
+    if (++applied % 100 === 0) process.stdout.write(`\r  aplicados no banco: ${applied}/${changed.length}`);
+  });
+  process.stdout.write(`\r  aplicados no banco: ${applied}/${changed.length}\n`);
+  console.log('Abreviações de livros (NT) localizadas no Supabase.');
 }
