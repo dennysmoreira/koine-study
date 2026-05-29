@@ -146,6 +146,8 @@ function extractFirstArray(text: string): string {
   throw new Error('array JSON não fechado na resposta');
 }
 
+type ParseFn = (text: string, expected: number) => string[];
+
 function parseArray(text: string, expected: number): string[] {
   const arr: unknown = JSON.parse(extractFirstArray(text));
   if (!Array.isArray(arr) || arr.length !== expected) {
@@ -159,8 +161,26 @@ function parseArray(text: string, expected: number): string[] {
   });
 }
 
+// Parser tolerante para a LSJ. Entradas longas (>4k chars) vão sozinhas no lote;
+// o modelo, ao traduzir um texto multi-linha, frequentemente QUEBRA a resposta em
+// várias strings (nos \n estruturais da entrada) em vez de devolver 1 string só.
+// Para lotes de 1 entrada, reunimos as partes com \n — reconstrói a entrada (a LSJ
+// é estruturada por linhas). Lotes multi-entrada continuam exigindo correspondência
+// exata (não dá para saber onde uma entrada termina e a outra começa).
+function parseArrayLsj(text: string, expected: number): string[] {
+  const arr: unknown = JSON.parse(extractFirstArray(text));
+  if (!Array.isArray(arr)) throw new Error('resposta não é array');
+  const strs = arr.map((x, i) => {
+    if (typeof x !== 'string') throw new Error(`elemento ${i} não é string (${typeof x})`);
+    return x;
+  });
+  if (strs.length === expected) return strs.map((s) => s.trim());
+  if (expected === 1) return [strs.join('\n').trim()]; // recupera entrada longa fragmentada
+  throw new Error(`resposta inesperada: ${strs.length} itens (esperado ${expected})`);
+}
+
 // ── providers ───────────────────────────────────────────────────────────
-function makeGemini(prompt: PromptBuilder): Translator {
+function makeGemini(prompt: PromptBuilder, parse: ParseFn = parseArray): Translator {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('defina GEMINI_API_KEY no .env (grátis em https://aistudio.google.com/apikey)');
   const model = process.env.TRANSLATE_MODEL || 'gemini-2.5-flash';
@@ -177,12 +197,12 @@ function makeGemini(prompt: PromptBuilder): Translator {
     }), 'Gemini');
     const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    return parseArray(text, texts.length);
+    return parse(text, texts.length);
   };
   return { name: 'gemini', model, fn };
 }
 
-function makeAnthropic(prompt: PromptBuilder): Translator {
+function makeAnthropic(prompt: PromptBuilder, parse: ParseFn = parseArray): Translator {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('defina ANTHROPIC_API_KEY no .env');
   const model = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
@@ -194,15 +214,15 @@ function makeAnthropic(prompt: PromptBuilder): Translator {
     }), 'Anthropic');
     const data = (await res.json()) as { content?: Array<{ text?: string }> };
     const text = data.content?.[0]?.text ?? '';
-    return parseArray(text, texts.length);
+    return parse(text, texts.length);
   };
   return { name: 'anthropic', model, fn };
 }
 
-function getTranslator(prompt: PromptBuilder): Translator {
+function getTranslator(prompt: PromptBuilder, parse: ParseFn = parseArray): Translator {
   const provider = (process.env.TRANSLATE_PROVIDER ?? 'gemini').toLowerCase();
-  if (provider === 'gemini') return makeGemini(prompt);
-  if (provider === 'anthropic') return makeAnthropic(prompt);
+  if (provider === 'gemini') return makeGemini(prompt, parse);
+  if (provider === 'anthropic') return makeAnthropic(prompt, parse);
   throw new Error(`TRANSLATE_PROVIDER inválido: "${provider}" (use gemini | anthropic)`);
 }
 
@@ -407,7 +427,7 @@ export async function translateLexiconEntries(buildDir: string, limit?: number):
   console.log(`entradas LSJ a traduzir: ${pending.length} (em cache: ${Object.keys(done).length})`);
 
   if (pending.length > 0) {
-    const { name, model, fn } = getTranslator(buildLsjPrompt);
+    const { name, model, fn } = getTranslator(buildLsjPrompt, parseArrayLsj);
     console.log(`provider: ${name} (${model}), orçamento=${LSJ_CHARS} chars/lote, intervalo=${SLEEP_MS}ms`);
     // lotes por orçamento de caracteres. Invariante: um lote só ultrapassa LSJ_CHARS
     // quando contém UMA única entrada que sozinha já excede o orçamento (inevitável).
@@ -427,6 +447,7 @@ export async function translateLexiconEntries(buildDir: string, limit?: number):
 
     try {
       let translated = 0;
+      let skipped = 0;
       for (let b = 0; b < batches.length; b++) {
         const chunk = batches[b]!;
         const inputs = chunk.map((e) => e.text_en);
@@ -434,10 +455,19 @@ export async function translateLexiconEntries(buildDir: string, limit?: number):
         for (let r = 0; r < 3; r++) {
           try { out = await fn(inputs); break; }
           catch (e) {
-            if (r === 2) throw e;
+            // cota DIÁRIA esgotada é fatal: re-lança p/ parar o run e aplicar o parcial.
+            // Demais erros (parse, transientes) só falham ESTE lote — re-tenta e, se
+            // persistir, pula (deixa pendente p/ próxima execução) sem abortar o run.
+            if (/cota diária/i.test((e as Error).message)) throw e;
+            if (r === 2) break;
             process.stdout.write(`\n  lote ${b} inválido (${(e as Error).message}); re-tentando ${r + 1}/2\n`);
             await sleep(2000);
           }
+        }
+        if (!out) {
+          skipped += chunk.length;
+          process.stdout.write(`\n  lote ${b} pulado após 3 tentativas (${chunk.length} entrada(s)); pendente p/ próxima execução\n`);
+          continue;
         }
         // não cacheia vazios: ficam pendentes p/ re-tentar na próxima execução (auto-recuperável)
         chunk.forEach((e, j) => { const t = out![j]; if (t) done[e.strongs] = t; });
@@ -447,6 +477,7 @@ export async function translateLexiconEntries(buildDir: string, limit?: number):
         if (b + 1 < batches.length && SLEEP_MS > 0) await sleep(SLEEP_MS);
       }
       process.stdout.write('\n');
+      if (skipped > 0) console.warn(`AVISO: ${skipped} entrada(s) puladas por erro de resposta; reexecute para re-tentar.`);
     } catch (e) {
       process.stdout.write('\n');
       console.warn(`tradução interrompida: ${(e as Error).message}`);
