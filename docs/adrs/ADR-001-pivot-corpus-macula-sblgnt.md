@@ -1,6 +1,6 @@
 # ADR-001 — Pivot do corpus para MACULA Greek (SBLGNT) + stack de léxicos em camadas
 
-- **Status:** Em execução (Fases A–G concluídas; H/I pendentes)
+- **Status:** Concluído (Fases A–G + I concluídas; H — tradução PT da LSJ — adiada como opcional)
 - **Data:** 2026-05-29
 - **Decisores:** Dennys
 - **Escopo:** koine-study (corpus, ETL, schema, leitor, dados de usuário)
@@ -148,10 +148,18 @@ usuário precisam de tratamento:
    (não removido). Justificativa: o atributo `morph` do MACULA É o formato Robinson/Tauber que `decodeMorph` parseia;
    manter um único vocabulário morfológico consistente alimenta `morph-labels.ts` + o quiz de parsing sem diferença
    para o usuário e com menos risco. Data Cache do Next limpo (`.next/cache`).
-8. **Fase H — Tradução PT** dos novos léxicos (Thayer's, Moulton-Milligan, LSJ) reusando `translate.ts`
-   (provider abstration + checkpoint resumível). Reaplicar `--step=localize-refs` (abreviações de livros).
+8. **Fase H — Tradução PT da LSJ (adiada, opcional).** Reusar `translate.ts` (provider abstration +
+   checkpoint resumível) sobre `lexicon_entries.text_pt`. Adiada pelo volume (10k entradas, custo de LLM);
+   a coluna `text_pt` está pronta e o leitor já renderiza `text_pt ?? text_en`, então pode ser feita
+   incrementalmente/sob demanda sem mudança de código. Thayer's/Moulton-Milligan idem (nem ingeridos ainda).
 9. **Fase I — Verificação.** Build/typecheck, preview MCP (mobile), conferir θεός com texto crítico + 4 léxicos,
    conferir que o SRS preservou progresso (contagem de cards antes/depois).
+
+   **Resultado (✅):** Build/typecheck/lint limpos. DB ao vivo: `lexicon_entries`=5.631 linhas; join θεός
+   (G2316)→entrada LSJ (2.243 chars, `gloss_pt`="Deus, um deus"); `srs_cards`=20 (progresso preservado);
+   `lemmas`=5.636 (cobertura LSJ ≈99,9%). Preview MCP (mobile 375px): leitor em João 1 renderiza o SBLGNT;
+   o painel de θεόν exibe Abbott-Smith (refs em PT) + LSJ (lazy-fetch via Server Action, sentidos `__b`
+   preservados) com atribuição STEPBible/CC BY 4.0. Script read-only `scripts/ingest/verify-lexicon.ts`.
 
 ## Alternativas consideradas
 
