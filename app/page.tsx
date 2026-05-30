@@ -1,46 +1,91 @@
-import Link from 'next/link';
-import { getBooks, type Book } from '@/lib/corpus';
 import { getGameStats } from '@/lib/gamification';
 import { AccountBadge } from '@/components/AccountBadge';
 import { GameStatsStrip } from '@/components/GameStats';
+import { ActivityCard, type Activity } from '@/components/ActivityCard';
 
 export const dynamic = 'force-dynamic';
 
-const TESTAMENT_LABELS: Record<string, string> = {
-  NT: 'Novo Testamento',
-  OT: 'Antigo Testamento',
-};
-
-function BookCard({ book }: { book: Book }) {
-  return (
-    <Link
-      href={`/read/${book.osis_code}/1`}
-      className="flex flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.98] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-    >
-      <span className="text-base font-medium">{book.name_pt}</span>
-      {book.name_grc && (
-        <span className="font-greek text-sm text-neutral-500">{book.name_grc}</span>
-      )}
-    </Link>
-  );
-}
+// Atividades agrupadas por intenção. As classes de cor são literais completas
+// para que o JIT do Tailwind as inclua no bundle.
+const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
+  {
+    title: 'Aprender',
+    subtitle: 'Comece do zero, no seu ritmo.',
+    items: [
+      {
+        href: '/alphabet',
+        icon: '🔤',
+        title: 'Alfabeto',
+        description: 'Aprenda as 24 letras jogando.',
+        iconClass: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+      },
+      {
+        href: '/lessons',
+        icon: '📖',
+        title: 'Gramática',
+        description: 'Os fundamentos, passo a passo.',
+        iconClass: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+      },
+    ],
+  },
+  {
+    title: 'Praticar',
+    subtitle: 'Fixe o que aprendeu.',
+    items: [
+      {
+        href: '/trail',
+        icon: '📊',
+        title: 'Frequência',
+        description: 'As palavras que mais aparecem no NT.',
+        iconClass: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
+      },
+      {
+        href: '/vocab',
+        icon: '🃏',
+        title: 'Vocabulário',
+        description: 'Revise com repetição espaçada.',
+        iconClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+      },
+      {
+        href: '/parsing',
+        icon: '🧩',
+        title: 'Parsing',
+        description: 'Treine a análise morfológica.',
+        iconClass: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
+      },
+    ],
+  },
+  {
+    title: 'Consultar & ler',
+    subtitle: 'Aprofunde e leia o texto.',
+    items: [
+      {
+        href: '/dictionary',
+        icon: '📚',
+        title: 'Dicionário',
+        description: 'Busque qualquer palavra do NT.',
+        iconClass: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
+      },
+      {
+        href: '/read',
+        icon: '📜',
+        title: 'Ler o Novo Testamento',
+        description: 'Leitor interlinear grego ↔ português.',
+        iconClass: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
+      },
+    ],
+  },
+];
 
 export default async function HomePage() {
-  const [books, gameStats] = await Promise.all([getBooks(), getGameStats()]);
-
-  const groups = new Map<string, Book[]>();
-  for (const book of books) {
-    const list = groups.get(book.testament) ?? [];
-    list.push(book);
-    groups.set(book.testament, list);
-  }
+  const gameStats = await getGameStats();
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Koiné Study</h1>
-          <p className="text-sm text-neutral-500">Leitor interlinear do Novo Testamento grego.</p>
+          <p className="text-sm text-neutral-500">Aprenda grego koiné do zero.</p>
         </div>
         <AccountBadge />
       </header>
@@ -51,85 +96,23 @@ export default async function HomePage() {
         </div>
       )}
 
-      <div className="mb-8 grid gap-3 sm:grid-cols-2">
-        <Link
-          href="/alphabet"
-          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-        >
-          <span className="flex flex-col">
-            <span className="text-base font-medium">Alfabeto</span>
-            <span className="text-sm text-neutral-500">Aprenda as 24 letras jogando.</span>
-          </span>
-          <span aria-hidden className="text-neutral-400">→</span>
-        </Link>
-        <Link
-          href="/trail"
-          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-        >
-          <span className="flex flex-col">
-            <span className="text-base font-medium">Frequência</span>
-            <span className="text-sm text-neutral-500">As palavras que mais aparecem no NT.</span>
-          </span>
-          <span aria-hidden className="text-neutral-400">→</span>
-        </Link>
-        <Link
-          href="/vocab"
-          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-        >
-          <span className="flex flex-col">
-            <span className="text-base font-medium">Vocabulário</span>
-            <span className="text-sm text-neutral-500">Revise palavras com repetição espaçada.</span>
-          </span>
-          <span aria-hidden className="text-neutral-400">→</span>
-        </Link>
-        <Link
-          href="/parsing"
-          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-        >
-          <span className="flex flex-col">
-            <span className="text-base font-medium">Parsing</span>
-            <span className="text-sm text-neutral-500">Treine a análise morfológica.</span>
-          </span>
-          <span aria-hidden className="text-neutral-400">→</span>
-        </Link>
-        <Link
-          href="/lessons"
-          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-        >
-          <span className="flex flex-col">
-            <span className="text-base font-medium">Gramática</span>
-            <span className="text-sm text-neutral-500">Aprenda os fundamentos passo a passo.</span>
-          </span>
-          <span aria-hidden className="text-neutral-400">→</span>
-        </Link>
-        <Link
-          href="/dictionary"
-          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-        >
-          <span className="flex flex-col">
-            <span className="text-base font-medium">Dicionário</span>
-            <span className="text-sm text-neutral-500">Busque qualquer palavra do NT.</span>
-          </span>
-          <span aria-hidden className="text-neutral-400">→</span>
-        </Link>
+      <div className="flex flex-col gap-8">
+        {SECTIONS.map((section) => (
+          <section key={section.title}>
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-400">
+                {section.title}
+              </h2>
+              <p className="text-xs text-neutral-400">{section.subtitle}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {section.items.map((item) => (
+                <ActivityCard key={item.href} activity={item} />
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
-
-      {books.length === 0 && (
-        <p className="text-neutral-500">Nenhum livro carregado no corpus.</p>
-      )}
-
-      {[...groups.entries()].map(([testament, list]) => (
-        <section key={testament} className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-            {TESTAMENT_LABELS[testament] ?? testament}
-          </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {list.map((book) => (
-              <BookCard key={book.id} book={book} />
-            ))}
-          </div>
-        </section>
-      ))}
     </main>
   );
 }
