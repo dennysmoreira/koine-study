@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { getBooks, type Book } from '@/lib/corpus';
+import { getGameStats } from '@/lib/gamification';
 import { AccountBadge } from '@/components/AccountBadge';
+import { GameStatsStrip } from '@/components/GameStats';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +26,7 @@ function BookCard({ book }: { book: Book }) {
 }
 
 export default async function HomePage() {
-  const books = await getBooks();
+  const [books, gameStats] = await Promise.all([getBooks(), getGameStats()]);
 
   const groups = new Map<string, Book[]>();
   for (const book of books) {
@@ -42,6 +44,12 @@ export default async function HomePage() {
         </div>
         <AccountBadge />
       </header>
+
+      {gameStats && (
+        <div className="mb-8">
+          <GameStatsStrip stats={gameStats} />
+        </div>
+      )}
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2">
         <Link
