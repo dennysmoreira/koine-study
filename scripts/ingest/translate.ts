@@ -44,13 +44,41 @@ const LEXICON_BATCH = Number(process.env.TRANSLATE_LEXICON_BATCH ?? 10); // Abbo
 const LSJ_CHARS = Number(process.env.TRANSLATE_LSJ_CHARS ?? 4000);
 const UPDATE_CONCURRENCY = 8;
 const SLEEP_MS = Number(process.env.TRANSLATE_SLEEP_MS ?? 7000); // ~8,5 req/min: respeita o free tier do Gemini 2.5-flash (10 RPM)
+// timeout por requisição: sem ele, uma conexão meio-aberta (rede oscila, ou o
+// provedor aceita o socket mas segura a resposta como soft-throttle) pendura o
+// fetch para sempre. Com deadline, o abort vira erro transitório -> retry/backoff.
+const FETCH_TIMEOUT_MS = Number(process.env.TRANSLATE_TIMEOUT_MS ?? 90000);
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-// faz fetch com retry/backoff em erros transientes (429 rate limit, 5xx sobrecarga)
+// fetch com deadline: aborta a requisição após FETCH_TIMEOUT_MS (AbortController).
+// O abort propaga como exceção, tratada como transitória por requestWithRetry.
+async function fetchWithTimeout(url: string, opts: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// faz fetch com retry/backoff em erros transientes (429 rate limit, 5xx sobrecarga,
+// falhas de rede e timeouts de conexão pendurada)
 async function requestWithRetry(doFetch: () => Promise<Response>, label: string, maxRetries = 6): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
-    const res = await doFetch();
+    let res: Response;
+    try {
+      res = await doFetch();
+    } catch (err) {
+      // erro de rede ("fetch failed") ou timeout (AbortError): transitório -> backoff.
+      // Sem isto, um abort/queda derrubaria o lote inteiro sem nova tentativa.
+      if (attempt >= maxRetries) throw new Error(`${label} falha de rede após ${maxRetries + 1} tentativas: ${(err as Error).message}`);
+      const wait = Math.min(64000, 2 ** attempt * 1000);
+      process.stdout.write(`\n  ${label} falha de rede (${(err as Error).message}); retry ${attempt + 1}/${maxRetries} em ${Math.round(wait / 1000)}s\n`);
+      await sleep(wait);
+      continue;
+    }
     if (res.ok) return res;
     const retriable = [429, 500, 502, 503, 504].includes(res.status);
     const body = await res.text();
@@ -186,7 +214,7 @@ function makeGemini(prompt: PromptBuilder, parse: ParseFn = parseArray): Transla
   const model = process.env.TRANSLATE_MODEL || 'gemini-2.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const fn: TranslateFn = async (texts) => {
-    const res = await requestWithRetry(() => fetch(`${url}?key=${key}`, {
+    const res = await requestWithRetry(() => fetchWithTimeout(`${url}?key=${key}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -207,7 +235,7 @@ function makeAnthropic(prompt: PromptBuilder, parse: ParseFn = parseArray): Tran
   if (!key) throw new Error('defina ANTHROPIC_API_KEY no .env');
   const model = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
   const fn: TranslateFn = async (texts) => {
-    const res = await requestWithRetry(() => fetch('https://api.anthropic.com/v1/messages', {
+    const res = await requestWithRetry(() => fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model, max_tokens: 8192, messages: [{ role: 'user', content: prompt(texts) }] }),
