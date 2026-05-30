@@ -154,6 +154,26 @@ function buildLsjPrompt(texts: string[]): string {
   ].join('\n');
 }
 
+// derivação de glosa curta a partir da definição LSJ (já em PT). Usado para os
+// lemas SEM gloss_en (Strong's de formas flexionadas que o Dodson não chaveia, mas
+// a LSJ cobre via o lema-base): condensamos a definição longa numa glosa de
+// dicionário. A entrada já vem truncada (cabeça do sentido) para caber no orçamento.
+function buildDeriveGlossPrompt(texts: string[]): string {
+  return [
+    'Você é um lexicógrafo de grego koiné bíblico.',
+    'Para cada DEFINIÇÃO (já em português) do array JSON a seguir, produza uma GLOSA CURTA em português (PT-BR).',
+    'Regras OBRIGATÓRIAS:',
+    '- A glosa deve ser concisa, estilo dicionário: 1 a 5 palavras (ex.: "dizer, falar", "eu", "tu", "este, esta").',
+    '- Capture apenas o sentido principal/mais comum da definição.',
+    '- NÃO inclua grego, transliteração, referências, marcadores (__1, II.) nem explicações.',
+    '- Use minúsculas (exceto nomes próprios); separe sentidos próximos por vírgula.',
+    '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
+    '',
+    'Entrada:',
+    JSON.stringify(texts),
+  ].join('\n');
+}
+
 // extrai o primeiro array JSON balanceado, ignorando cercas de código e lixo após o array
 function extractFirstArray(text: string): string {
   let t = text.trim();
@@ -391,6 +411,179 @@ export async function translate(buildDir: string): Promise<void> {
   });
   process.stdout.write(`\r  aplicados no banco: ${applied}/${entries.length}\n`);
   console.log('glosas PT aplicadas ao Supabase.');
+}
+
+// orçamento de chars por lote e truncagem por entrada da derivação de glosa.
+// A cabeça do sentido na LSJ fica no início da entrada, então truncar é seguro;
+// uma cauda eventualmente cortada no meio de uma palavra/estrutura é irrelevante,
+// pois só extraímos o sentido condensado (a glosa nunca reproduz o texto truncado).
+const DERIVE_CHARS = Number(process.env.TRANSLATE_DERIVE_CHARS ?? 8000);
+const DERIVE_TRUNC = Number(process.env.TRANSLATE_DERIVE_TRUNC ?? 700);
+
+/**
+ * Deriva uma gloss_pt CURTA para lemas usados no corpus que não têm nem gloss_pt
+ * nem gloss_en (Strong's de formas flexionadas que o Dodson não chaveia — ex.:
+ * G2036 λέγω/εἶπον, G2076 εἰμί/ἐστίν, pronomes σύ/ἐγώ — mas que a LSJ cobre).
+ * Fonte: a definição LSJ JÁ TRADUZIDA (lexicon_entries.text_pt), condensada pelo LLM.
+ *
+ * Idempotente/resumível: cache em data/build/gloss-derived.pt.json (Strong's -> glosa).
+ * Aplica gloss_pt em public.lemmas por Strong's. Rode APÓS --step=translate-lsj
+ * (precisa do text_pt da LSJ) e SERIALMENTE com os demais passos de tradução.
+ */
+export async function deriveGloss(buildDir: string, limit?: number): Promise<void> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no .env');
+  const cachePath = join(buildDir, 'gloss-derived.pt.json');
+  const done: Record<string, string> = existsSync(cachePath)
+    ? JSON.parse(readFileSync(cachePath, 'utf8'))
+    : {};
+
+  const client = createClient(url, key, { auth: { persistSession: false } });
+
+  // lemas do corpus sem glosa nenhuma (gloss_pt e gloss_en nulos). Paginado por
+  // range: o filtro hoje devolve ~85 linhas, mas o cap default do PostgREST é 1000;
+  // sem paginação um futuro aumento da lacuna truncaria SILENCIOSAMENTE os candidatos
+  // (mesma razão de lemmaIdsByStrongs paginar). Espelha aquele padrão.
+  const PAGE = 1000;
+  const lemmas: Array<{ id: number; strongs: string | null; frequency: number }> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await (client.from('lemmas') as any)
+      .select('id,strongs,frequency')
+      .gt('frequency', 0)
+      .is('gloss_pt', null)
+      .is('gloss_en', null)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`leitura de lemmas: ${error.message}`);
+    const rows = data as typeof lemmas;
+    lemmas.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+
+  // Strong's distinto (descarta sem Strong's: G0/null não têm entrada LSJ),
+  // somando a frequência das formas que compartilham o Strong's (prioriza por uso).
+  const freqByStrongs = new Map<string, number>();
+  const idsByStrongs = new Map<string, number[]>();
+  for (const l of lemmas as Array<{ id: number; strongs: string | null; frequency: number }>) {
+    if (!l.strongs || l.strongs === 'G0') continue;
+    freqByStrongs.set(l.strongs, (freqByStrongs.get(l.strongs) ?? 0) + l.frequency);
+    const arr = idsByStrongs.get(l.strongs) ?? [];
+    arr.push(l.id);
+    idsByStrongs.set(l.strongs, arr);
+  }
+
+  // lemma_id -> Strong's (invariante: construído uma vez, fora do loop de chunks)
+  const idToStrongs = new Map<number, string>();
+  for (const [s, ids] of idsByStrongs) for (const id of ids) idToStrongs.set(id, s);
+
+  // text_pt da LSJ por lemma_id -> mapeia de volta para Strong's
+  const lsjByStrongs = new Map<string, string>();
+  const allIds = [...idToStrongs.keys()];
+  for (let i = 0; i < allIds.length; i += 200) {
+    const chunk = allIds.slice(i, i + 200);
+    const { data: le, error: e2 } = await (client.from('lexicon_entries') as any)
+      .select('lemma_id,text_pt')
+      .in('lemma_id', chunk)
+      .eq('source', 'lsj');
+    if (e2) throw new Error(`leitura de lexicon_entries: ${e2.message}`);
+    for (const r of le as Array<{ lemma_id: number; text_pt: string | null }>) {
+      if (!r.text_pt) continue;
+      const s = idToStrongs.get(r.lemma_id);
+      if (s && !lsjByStrongs.has(s)) lsjByStrongs.set(s, r.text_pt);
+    }
+  }
+
+  // pendentes: tem LSJ text_pt, ainda não derivado; ordenado por frequência desc
+  let pending = [...freqByStrongs.entries()]
+    .filter(([s]) => lsjByStrongs.has(s) && !(s in done))
+    .sort((a, b) => b[1] - a[1])
+    .map(([s]) => s);
+  if (limit && limit > 0) pending = pending.slice(0, limit);
+
+  const semFonte = [...freqByStrongs.keys()].filter((s) => !lsjByStrongs.has(s)).length;
+  console.log(`glosas a derivar da LSJ: ${pending.length} (em cache: ${Object.keys(done).length}; sem LSJ: ${semFonte})`);
+
+  if (pending.length > 0) {
+    const { name, model, fn } = getTranslator(buildDeriveGlossPrompt);
+    console.log(`provider: ${name} (${model}), orçamento=${DERIVE_CHARS} chars/lote, intervalo=${SLEEP_MS}ms`);
+
+    // payload truncado calculado UMA vez por Strong's: o orçamento de lote e a entrada
+    // enviada usam exatamente a mesma string, então nunca divergem. Toda entrada é
+    // <= DERIVE_TRUNC < DERIVE_CHARS, logo o caso "entrada única maior que o orçamento"
+    // (que translateLexiconEntries precisa proteger) não pode ocorrer aqui.
+    const truncated = new Map<string, string>();
+    for (const s of pending) {
+      const t = lsjByStrongs.get(s)!;
+      truncated.set(s, t.length > DERIVE_TRUNC ? t.slice(0, DERIVE_TRUNC) : t);
+    }
+    const batches: string[][] = [];
+    let cur: string[] = [];
+    let curChars = 0;
+    for (const s of pending) {
+      const len = truncated.get(s)!.length;
+      if (cur.length > 0 && curChars + len > DERIVE_CHARS) { batches.push(cur); cur = []; curChars = 0; }
+      cur.push(s);
+      curChars += len;
+    }
+    if (cur.length > 0) batches.push(cur);
+
+    let derived = 0;
+    let skipped = 0;
+    try {
+      for (let b = 0; b < batches.length; b++) {
+        const chunk = batches[b]!;
+        const inputs = chunk.map((s) => truncated.get(s)!);
+        let out: string[] | undefined;
+        for (let r = 0; r < 3; r++) {
+          try { out = await fn(inputs); break; }
+          catch (e) {
+            if (/cota diária/i.test((e as Error).message)) throw e;
+            if (r === 2) break;
+            process.stdout.write(`\n  lote ${b} inválido (${(e as Error).message}); re-tentando ${r + 1}/2\n`);
+            await sleep(2000);
+          }
+        }
+        if (!out) {
+          skipped += chunk.length;
+          process.stdout.write(`\n  lote ${b} pulado após 3 tentativas (${chunk.length}); pendente p/ próxima execução\n`);
+          continue;
+        }
+        chunk.forEach((s, j) => { const t = out![j]; if (t) done[s] = t; });
+        writeFileSync(cachePath, JSON.stringify(done), 'utf8');
+        derived += chunk.length;
+        process.stdout.write(`\r  derivadas: ${derived}/${pending.length}`);
+        if (b + 1 < batches.length && SLEEP_MS > 0) await sleep(SLEEP_MS);
+      }
+      process.stdout.write('\n');
+      if (skipped > 0) console.warn(`AVISO: ${skipped} glosa(s) puladas; reexecute para re-tentar.`);
+    } catch (e) {
+      process.stdout.write('\n');
+      console.warn(`derivação interrompida: ${(e as Error).message}`);
+      console.warn(`progresso salvo no cache: ${Object.keys(done).length} de ${Object.keys(done).length + pending.length} glosas. Reexecute para retomar.`);
+    }
+  }
+
+  // Aplica gloss_pt SÓ aos lemma_ids candidatos (os que vieram sem glosa nenhuma),
+  // não a todos os homógrafos do Strong's: um Strong's mapeia vários lemas (identidade
+  // = (strongs, lemma) em macula.ts), e um homógrafo que JÁ tinha glosa foi excluído
+  // de propósito — broadcastar por .eq('strongs') o sobrescreveria com uma glosa de
+  // outro sentido. O .is('gloss_pt', null) é guarda extra (idempotência sob corrida).
+  // Strong's no cache mas ausente de idsByStrongs = já aplicado em run anterior (pulado).
+  const entries = Object.entries(done).filter(([, g]) => g);
+  let applied = 0;
+  let skippedApply = 0;
+  await pMap(entries, UPDATE_CONCURRENCY, async ([strongs, gloss]) => {
+    const ids = idsByStrongs.get(strongs);
+    if (!ids || ids.length === 0) { skippedApply++; return; }
+    const { error: uErr } = await (client.from('lemmas') as any)
+      .update({ gloss_pt: gloss }).in('id', ids).is('gloss_pt', null);
+    if (uErr) throw new Error(`update lemma ${strongs}: ${uErr.message}`);
+    if (++applied % 100 === 0) process.stdout.write(`\r  aplicadas no banco: ${applied}/${entries.length}`);
+  });
+  process.stdout.write(`\r  aplicadas no banco: ${applied}/${entries.length}\n`);
+  if (skippedApply > 0) console.log(`  (${skippedApply} já aplicadas em execução anterior)`);
+  console.log('glosas PT derivadas da LSJ aplicadas ao Supabase.');
 }
 
 /**

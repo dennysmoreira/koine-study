@@ -27,7 +27,7 @@ import { parse } from 'csv-parse/sync';
 import { createClient } from '@supabase/supabase-js';
 import { decodeMorph } from './morph-decoder.ts';
 import { BOOKS, normalizeStrongs } from './books.ts';
-import { translate, translateLexicon, translateLexiconEntries, localizeRefs } from './translate.ts';
+import { translate, translateLexicon, translateLexiconEntries, deriveGloss, localizeRefs } from './translate.ts';
 import { parseAbbottSmith } from './abbott-smith.ts';
 import { parseDodson } from './dodson.ts';
 import { downloadMacula, buildMacula } from './macula.ts';
@@ -395,6 +395,7 @@ async function main(): Promise<void> {
   if (step === 'translate') return void (await translate(BUILD));
   if (step === 'translate-lexicon') return void (await translateLexicon(BUILD, Number(arg('limit') ?? 0)));
   if (step === 'translate-lsj') return void (await translateLexiconEntries(BUILD, Number(arg('limit') ?? 0)));
+  if (step === 'derive-gloss') return void (await deriveGloss(BUILD, Number(arg('limit') ?? 0)));
   if (step === 'localize-refs') return void (await localizeRefs(BUILD));
   if (step === 'load') return void (await load());
   if (step === 'lexicon') return void (await lexicon());
