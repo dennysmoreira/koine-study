@@ -80,6 +80,13 @@ const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
         description: 'Veja traduções lado a lado.',
         iconClass: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
       },
+      {
+        href: '/studies',
+        icon: '✨',
+        title: 'Estudos salvos',
+        description: 'Seus textos gerados com IA.',
+        iconClass: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+      },
     ],
   },
 ];

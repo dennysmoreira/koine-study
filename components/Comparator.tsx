@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Book } from '@/lib/corpus';
 import type { ParallelChapter, Translation } from '@/lib/translations';
+import { StudyModal } from './StudyModal';
 
 const TESTAMENT_LABELS: Record<string, string> = {
   NT: 'Novo Testamento',
@@ -192,6 +193,7 @@ export function Comparator({
   const { book, number, chapters, translations, rows } = chapter;
   const [navOpen, setNavOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [studyOpen, setStudyOpen] = useState(false);
 
   const codes = translations.map((t) => t.code);
   const idx = chapters.indexOf(number);
@@ -221,6 +223,14 @@ export function Comparator({
           </svg>
         </button>
         <div className="flex items-center gap-3 text-sm">
+          <button
+            type="button"
+            onClick={() => setStudyOpen(true)}
+            className="rounded-md px-2 py-1 font-medium text-amber-600 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/30"
+            aria-label="Estudo com IA"
+          >
+            ✨ Estudo
+          </button>
           <button
             type="button"
             onClick={() => setVersionsOpen(true)}
@@ -309,6 +319,16 @@ export function Comparator({
           osis={book.osis_code}
           chapter={number}
           onClose={() => setVersionsOpen(false)}
+        />
+      )}
+
+      {studyOpen && (
+        <StudyModal
+          osis={book.osis_code}
+          chapter={number}
+          codes={codes}
+          bookName={book.name_pt}
+          onClose={() => setStudyOpen(false)}
         />
       )}
     </div>
