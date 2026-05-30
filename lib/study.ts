@@ -86,14 +86,37 @@ export async function buildStudyContext(
   return { text: lines.join('\n'), bookName: greek.book.name_pt };
 }
 
-/** Monta o prompt do usuário: instrução do modo + contexto + pergunta livre. */
+/**
+ * Monta o prompt do usuário: instrução do modo + foco do usuário (prioritário) +
+ * material do capítulo como contexto.
+ *
+ * Quando o usuário informa um foco (ex.: "versículo 33, para mentoria de casais"),
+ * ele vem ANTES do material e com instrução explícita de prioridade — senão o
+ * modelo trata o pedido como secundário e devolve um estudo genérico do capítulo.
+ */
 export function buildStudyPrompt(mode: StudyMode, context: string, userPrompt: string): string {
   const meta = getStudyMode(mode);
-  const parts = [meta.instruction, '', '---', 'MATERIAL DO CAPÍTULO:', context];
   const extra = userPrompt.trim();
+  const parts: string[] = [meta.instruction];
+
   if (extra) {
-    const label = meta.needsPrompt ? 'PERGUNTA DO USUÁRIO' : 'ORIENTAÇÃO ADICIONAL DO USUÁRIO';
-    parts.push('', '---', `${label}: ${extra}`);
+    if (meta.needsPrompt) {
+      // Modo "pergunta livre": o texto do usuário é a própria pergunta.
+      parts.push('', '---', 'PERGUNTA DO USUÁRIO (responda especificamente a isto):', extra);
+    } else {
+      // Demais modos: o texto é um FOCO que deve reger todo o estudo.
+      parts.push(
+        '',
+        '---',
+        'FOCO SOLICITADO PELO USUÁRIO (PRIORIDADE MÁXIMA):',
+        extra,
+        '',
+        'Direcione TODO o estudo a este foco — respeite o versículo, o público-alvo e/ou o ângulo indicados.',
+        'Use o restante do capítulo apenas como contexto de apoio; não o transforme no assunto principal.',
+      );
+    }
   }
+
+  parts.push('', '---', 'MATERIAL DO CAPÍTULO (contexto):', context);
   return parts.join('\n');
 }

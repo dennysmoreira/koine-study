@@ -11,8 +11,15 @@
  */
 import 'server-only';
 
-// Modelos de geração (free tier). Ordem = tentativa: o 1º que conectar é usado.
-const GEN_MODELS = (process.env.GEMINI_GEN_MODELS ?? 'gemini-2.5-flash,gemini-2.5-flash-lite')
+// Modelos de geração, em ordem de preferência. A cadeia é um FAILOVER: o 1º que
+// responder 200 é usado; se um devolver 429 (cota diária estourada) ou erro, cai
+// para o próximo. Por isso colocamos os 2.5 (melhor qualidade, porém com cota
+// diária baixa no free tier) à frente dos 2.0 (qualidade boa e cota bem maior):
+// usa-se o melhor enquanto dura e degrada graciosamente quando a cota acaba.
+const GEN_MODELS = (
+  process.env.GEMINI_GEN_MODELS ??
+  'gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash,gemini-2.0-flash-lite'
+)
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
@@ -47,10 +54,31 @@ function sseToTextStream(upstream: ReadableStream<Uint8Array>): ReadableStream<U
   const encoder = new TextEncoder();
   let buffer = '';
 
+  // Extrai o delta de texto de uma linha `data:` e o emite no stream de saída.
+  const processLine = (controller: ReadableStreamDefaultController<Uint8Array>, line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) return;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === '[DONE]') return;
+    try {
+      const json = JSON.parse(payload) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) controller.enqueue(encoder.encode(text));
+    } catch {
+      // evento parcial/keep-alive — ignora
+    }
+  };
+
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       const { done, value } = await reader.read();
       if (done) {
+        // Flush: decodifica o resto e processa a última linha pendente no buffer
+        // (o evento final pode não terminar com '\n' e seria perdido).
+        buffer += decoder.decode();
+        if (buffer.trim()) processLine(controller, buffer);
         controller.close();
         return;
       }
@@ -58,21 +86,7 @@ function sseToTextStream(upstream: ReadableStream<Uint8Array>): ReadableStream<U
       // SSE separa eventos por linha; cada evento de dado começa com "data: ".
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? ''; // guarda a última linha (possivelmente parcial)
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-        const payload = trimmed.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        try {
-          const json = JSON.parse(payload) as {
-            candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-          };
-          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) controller.enqueue(encoder.encode(text));
-        } catch {
-          // evento parcial/keep-alive — ignora
-        }
-      }
+      for (const line of lines) processLine(controller, line);
     },
     cancel(reason) {
       void reader.cancel(reason);
@@ -91,14 +105,24 @@ export async function streamGeminiText(opts: GeminiGenOptions): Promise<Readable
     throw new Error('defina GEMINI_API_KEY no .env (grátis em https://aistudio.google.com/apikey)');
   }
 
-  const body = JSON.stringify({
-    systemInstruction: { parts: [{ text: opts.system }] },
-    contents: [{ role: 'user', parts: [{ text: opts.prompt }] }],
-    generationConfig: {
-      temperature: opts.temperature ?? 0.7,
-      maxOutputTokens: opts.maxOutputTokens ?? 4096,
-    },
-  });
+  const temperature = opts.temperature ?? 0.7;
+  const maxOutputTokens = opts.maxOutputTokens ?? 8192;
+
+  // Corpo por modelo: nos modelos 2.5 o "thinking" é ligado por padrão e consome
+  // o orçamento de saída ANTES do texto visível, truncando a resposta no meio.
+  // Como aqui geramos texto corrido (não raciocínio passo-a-passo), desligamos
+  // (thinkingBudget: 0) para liberar todo o budget ao conteúdo e acelerar.
+  const bodyFor = (model: string): string => {
+    const generationConfig: Record<string, unknown> = { temperature, maxOutputTokens };
+    if (model.includes('2.5')) {
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
+    return JSON.stringify({
+      systemInstruction: { parts: [{ text: opts.system }] },
+      contents: [{ role: 'user', parts: [{ text: opts.prompt }] }],
+      generationConfig,
+    });
+  };
 
   let lastErr = '';
   for (const key of keys) {
@@ -109,7 +133,7 @@ export async function streamGeminiText(opts: GeminiGenOptions): Promise<Readable
         res = await fetch(url, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body,
+          body: bodyFor(model),
         });
       } catch (e) {
         lastErr = `rede (${model}): ${e instanceof Error ? e.message : String(e)}`;
