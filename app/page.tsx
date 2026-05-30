@@ -43,7 +43,17 @@ export default async function HomePage() {
         <AccountBadge />
       </header>
 
-      <div className="mb-8 grid gap-3 sm:grid-cols-3">
+      <div className="mb-8 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/alphabet"
+          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
+        >
+          <span className="flex flex-col">
+            <span className="text-base font-medium">Alfabeto</span>
+            <span className="text-sm text-neutral-500">Aprenda as 24 letras jogando.</span>
+          </span>
+          <span aria-hidden className="text-neutral-400">→</span>
+        </Link>
         <Link
           href="/vocab"
           className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
