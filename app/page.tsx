@@ -73,6 +73,13 @@ const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
         description: 'Leitor interlinear grego ↔ português.',
         iconClass: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
       },
+      {
+        href: '/compare',
+        icon: '⚖️',
+        title: 'Comparar versões',
+        description: 'Veja traduções lado a lado.',
+        iconClass: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
+      },
     ],
   },
 ];

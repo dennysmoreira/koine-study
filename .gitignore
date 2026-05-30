@@ -15,3 +15,6 @@ data/sources/
 data/build/
 
 .vercel
+
+# Supabase CLI (temporário, não versionar)
+supabase/.temp/

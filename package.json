@@ -26,6 +26,8 @@
     "ingest:download-stepbible": "tsx scripts/ingest/index.ts --step=download-stepbible",
     "ingest:build-lexicons": "tsx scripts/ingest/index.ts --step=build-lexicons",
     "ingest:load-lexicons": "tsx scripts/ingest/index.ts --step=load-lexicons",
+    "ingest:backfill-greek": "tsx scripts/ingest/index.ts --step=backfill-greek",
+    "ingest:version": "tsx scripts/ingest/index.ts --step=ingest-version",
     "morph:test": "tsx scripts/ingest/morph-decoder.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json"

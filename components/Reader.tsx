@@ -356,6 +356,15 @@ function NavSheet({
             </button>
           ))}
         </div>
+
+        <Link
+          href={`/compare/${current.osis_code}/${chapter}`}
+          onClick={onClose}
+          className="mt-6 flex items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-medium transition hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
+        >
+          <span aria-hidden>⚖️</span>
+          Comparar versões deste capítulo
+        </Link>
       </div>
     </div>
   );
