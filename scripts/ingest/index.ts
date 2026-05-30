@@ -34,7 +34,8 @@ import { downloadMacula, buildMacula } from './macula.ts';
 import { reloadMacula } from './reload.ts';
 import { insertBatched, lemmaIdsByStrongs } from './supabase-io.ts';
 import { parseTflsj } from './stepbible-lsj.ts';
-import { backfillGreek, ingestFreeVersions } from './verse-texts.ts';
+import { backfillGreek, ingestFreeVersions, ingestVersionFromFile } from './verse-texts.ts';
+import { convertUsfm } from './usfm.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SOURCES = join(ROOT, 'data', 'sources');
@@ -403,6 +404,8 @@ async function main(): Promise<void> {
   if (step === 'load-lexicons') return void (await loadLexicons());
   if (step === 'backfill-greek') return void (await backfillGreek());
   if (step === 'ingest-version') return void (await ingestFreeVersions(arg('code')));
+  if (step === 'ingest-version-file') return void (await ingestVersionFromFile(arg('file')));
+  if (step === 'convert-usfm') return convertUsfm();
   // padrão: download + build
   await download();
   build();

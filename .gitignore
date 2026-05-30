@@ -18,3 +18,8 @@ data/build/
 
 # Supabase CLI (temporário, não versionar)
 supabase/.temp/
+
+# Versões licenciadas (texto protegido por direitos autorais NUNCA é versionado;
+# o exemplo de formato é a única exceção permitida)
+data/versions/*
+!data/versions/_example.json

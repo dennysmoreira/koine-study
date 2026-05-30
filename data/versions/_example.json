@@ -1,0 +1,16 @@
+{
+  "_comentario": "Exemplo de formato para cadastrar uma versao via 'npm run ingest:version-file -- --file=data/versions/SEU-ARQUIVO.json'. ATENCAO: versoes protegidas (NVI/ACF/NAA/ARA/NTLH...) so podem ser carregadas se voce possuir a licenca do detentor dos direitos. Este passo NAO baixa texto da internet; ele apenas carrega o que estiver neste arquivo. Os textos abaixo sao placeholders.",
+  "code": "pt-exemplo",
+  "name": "Versao de Exemplo",
+  "language": "pt",
+  "license": "Licenca do detentor dos direitos (preencher)",
+  "source_url": "https://exemplo.org",
+  "text_type": "translation",
+  "sort_order": 50,
+  "verses": [
+    { "ref": "John 1:1", "text": "TEXTO DO VERSICULO AQUI (placeholder)." },
+    { "ref": "John 1:2", "text": "TEXTO DO VERSICULO AQUI (placeholder)." },
+    { "book": "John", "chapter": 1, "verse": 3, "text": "Alternativa: usar book/chapter/verse em vez de ref." },
+    { "book": 43, "chapter": 1, "verse": 4, "text": "book tambem aceita o id numerico do livro (Joao = 43)." }
+  ]
+}

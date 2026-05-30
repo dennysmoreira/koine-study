@@ -28,6 +28,8 @@
     "ingest:load-lexicons": "tsx scripts/ingest/index.ts --step=load-lexicons",
     "ingest:backfill-greek": "tsx scripts/ingest/index.ts --step=backfill-greek",
     "ingest:version": "tsx scripts/ingest/index.ts --step=ingest-version",
+    "ingest:version-file": "tsx scripts/ingest/index.ts --step=ingest-version-file",
+    "ingest:convert-usfm": "tsx scripts/ingest/index.ts --step=convert-usfm",
     "morph:test": "tsx scripts/ingest/morph-decoder.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json"

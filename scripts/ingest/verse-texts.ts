@@ -17,6 +17,7 @@
  */
 
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
 const GRC_CODE = 'grc-sblgnt';
@@ -329,4 +330,190 @@ export async function ingestFreeVersions(codeFilter?: string): Promise<void> {
   for (const src of targets) {
     await ingestVersion(client, src, chapterList);
   }
+}
+
+// ── Cadastro de versões a partir de arquivo (texto fornecido pelo usuário) ──
+//
+// IMPORTANTE — DIREITOS AUTORAIS: este passo NÃO baixa nem busca nenhum texto.
+// Ele apenas CARREGA um arquivo que VOCÊ fornece. Para versões protegidas
+// (NVI, ACF, NAA, ARA, NTLH etc.), o arquivo só pode ser usado se você possuir
+// a licença do detentor dos direitos (editora/sociedade bíblica). A estrutura
+// é agnóstica: o gargalo nunca foi técnico, e sim jurídico.
+//
+// Formato do arquivo (JSON):
+// {
+//   "code": "pt-nvi",                  // identificador único (kebab-case)
+//   "name": "Nova Versão Internacional",
+//   "language": "pt",                  // pt | en | grc | ...
+//   "license": "© Biblica — uso licenciado",
+//   "source_url": "https://...",       // opcional
+//   "text_type": "translation",        // translation | critical | paraphrase ...
+//   "sort_order": 15,                  // ordem nas colunas (grego=0, livres=10/20)
+//   "verses": [
+//     { "ref": "John 1:1", "text": "..." }
+//     // — ou — { "book": "John", "chapter": 1, "verse": 1, "text": "..." }
+//     // "book" aceita osis_code (ex.: "1John") ou o id numérico do livro.
+//   ]
+// }
+
+interface VersionFileVerse {
+  ref?: string;
+  book?: string | number;
+  chapter?: number;
+  verse?: number;
+  text: string;
+}
+
+interface VersionFile {
+  code?: string;
+  name?: string;
+  language?: string;
+  license?: string;
+  source_url?: string;
+  text_type?: string;
+  sort_order?: number;
+  verses?: VersionFileVerse[];
+}
+
+/** Divide "1 John 2:3" em { osis: "1 John", chapter: 2, verse: 3 }. */
+function parseRef(ref: string): { osis: string; chapter: number; verse: number } | null {
+  const at = ref.lastIndexOf(' ');
+  if (at <= 0) return null;
+  const osis = ref.slice(0, at).trim();
+  const cv = ref.slice(at + 1).split(':');
+  if (cv.length !== 2) return null;
+  const chapter = Number(cv[0]);
+  const verse = Number(cv[1]);
+  if (!Number.isFinite(chapter) || !Number.isFinite(verse)) return null;
+  return { osis, chapter, verse };
+}
+
+/**
+ * Cadastra/atualiza UMA versão a partir de um arquivo JSON local fornecido pelo
+ * usuário. Idempotente: upsert por (translation_code, ref). Não baixa nada da
+ * internet — o conteúdo vem exclusivamente do arquivo.
+ */
+export async function ingestVersionFromFile(filePath?: string): Promise<void> {
+  if (!filePath) {
+    throw new Error(
+      'informe o arquivo: npm run ingest:version-file -- --file=data/versions/pt-nvi.json',
+    );
+  }
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no .env');
+
+  let parsed: VersionFile;
+  try {
+    parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as VersionFile;
+  } catch (e) {
+    throw new Error(`não consegui ler/parsear ${filePath}: ${e instanceof Error ? e.message : e}`);
+  }
+
+  // valida metadados obrigatórios
+  const required: Array<keyof VersionFile> = ['code', 'name', 'language', 'license'];
+  const missing = required.filter((k) => !parsed[k]);
+  if (missing.length) throw new Error(`campos obrigatórios ausentes no arquivo: ${missing.join(', ')}`);
+  if (!Array.isArray(parsed.verses) || parsed.verses.length === 0) {
+    throw new Error('o arquivo não contém "verses" (array não-vazio)');
+  }
+
+  const code = parsed.code as string;
+  const client = createClient(url, key, { auth: { persistSession: false } });
+
+  console.log(`\n── cadastrando ${code} (${parsed.name}) a partir de ${filePath} ──`);
+  console.log('  NOTA: este passo só carrega o arquivo fornecido; não baixa texto da internet.');
+
+  // mapeia osis_code -> id e id -> osis_code (aceita ambos no campo "book")
+  const books = await readAll<{ id: number; osis_code: string }>(client, 'books', 'id,osis_code', 'id');
+  const idByOsis = new Map(books.map((b) => [b.osis_code, b.id]));
+  const osisById = new Map(books.map((b) => [b.id, b.osis_code]));
+
+  const { error: tErr } = await client.from('translations').upsert(
+    {
+      code,
+      name: parsed.name,
+      language: parsed.language,
+      license: parsed.license,
+      source_url: parsed.source_url ?? null,
+      text_type: parsed.text_type ?? 'translation',
+      is_original: false,
+      sort_order: parsed.sort_order ?? 50,
+    },
+    { onConflict: 'code' },
+  );
+  if (tErr) throw new Error(`upsert translations[${code}]: ${tErr.message}`);
+
+  // monta linhas resolvendo book_id e ref canônica
+  const rows: Array<Record<string, unknown>> = [];
+  let skipped = 0;
+  for (const v of parsed.verses) {
+    const text = (v.text ?? '').replace(/\s+/g, ' ').trim();
+    if (!text) {
+      skipped++;
+      continue;
+    }
+
+    let osis: string | undefined;
+    let chapter: number | undefined;
+    let verse: number | undefined;
+    let bookId: number | undefined;
+
+    if (v.ref) {
+      const p = parseRef(v.ref);
+      if (!p) {
+        skipped++;
+        continue;
+      }
+      osis = p.osis;
+      chapter = p.chapter;
+      verse = p.verse;
+      bookId = idByOsis.get(osis);
+    } else {
+      chapter = Number(v.chapter);
+      verse = Number(v.verse);
+      if (typeof v.book === 'number') {
+        bookId = v.book;
+        osis = osisById.get(v.book);
+      } else if (typeof v.book === 'string') {
+        bookId = idByOsis.get(v.book);
+        osis = v.book;
+      }
+    }
+
+    if (!osis || !bookId || !Number.isFinite(chapter) || !Number.isFinite(verse)) {
+      skipped++;
+      continue;
+    }
+
+    rows.push({
+      translation_code: code,
+      ref: `${osis} ${chapter}:${verse}`,
+      book_id: bookId,
+      chapter,
+      verse,
+      text,
+    });
+  }
+
+  console.log(`  versículos válidos: ${rows.length} (ignorados: ${skipped})`);
+  if (rows.length === 0) {
+    throw new Error(
+      'nenhum versículo válido — verifique o campo "ref"/"book" (osis_code deve bater com a tabela books).',
+    );
+  }
+
+  const SIZE = 500;
+  let applied = 0;
+  for (let i = 0; i < rows.length; i += SIZE) {
+    const batch = rows.slice(i, i + SIZE);
+    const { error } = await client
+      .from('verse_texts')
+      .upsert(batch, { onConflict: 'translation_code,ref' });
+    if (error) throw new Error(`upsert verse_texts[${code}] @${i}: ${error.message}`);
+    applied += batch.length;
+    process.stdout.write(`\r  verse_texts (${code}): ${applied}/${rows.length}`);
+  }
+  process.stdout.write('\n');
+  console.log(`${code}: ${applied} versículos cadastrados.`);
 }
