@@ -208,26 +208,86 @@ function parseArrayLsj(text: string, expected: number): string[] {
 }
 
 // ── providers ───────────────────────────────────────────────────────────
+// coleta todas as chaves Gemini do .env: GEMINI_API_KEY + GEMINI_API_KEY_2..N
+// (sequência contígua a partir de 2). Cada chave/projeto tem cota diária própria;
+// rotacionar entre elas multiplica a capacidade do free tier.
+function collectGeminiKeys(): string[] {
+  const keys: string[] = [];
+  const base = process.env.GEMINI_API_KEY?.trim();
+  if (base) keys.push(base);
+  for (let i = 2; ; i++) {
+    const k = process.env[`GEMINI_API_KEY_${i}`]?.trim();
+    if (!k) break;
+    keys.push(k);
+  }
+  return keys;
+}
+
+// modelos Gemini free disponíveis por chave (cada um tem cota diária PRÓPRIA).
+// Ordem: flash-lite primeiro (maior RPD no free tier), depois os flash maiores.
+const DEFAULT_GEMINI_MODELS = ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash'];
+
+// resolve a lista de modelos a rotacionar: TRANSLATE_MODELS (csv) > TRANSLATE_MODEL (único) > default(4).
+function collectGeminiModels(): string[] {
+  const csv = process.env.TRANSLATE_MODELS?.trim();
+  if (csv) return csv.split(',').map((s) => s.trim()).filter(Boolean);
+  const single = process.env.TRANSLATE_MODEL?.trim();
+  if (single) return [single];
+  return DEFAULT_GEMINI_MODELS;
+}
+
 function makeGemini(prompt: PromptBuilder, parse: ParseFn = parseArray): Translator {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('defina GEMINI_API_KEY no .env (grátis em https://aistudio.google.com/apikey)');
-  const model = process.env.TRANSLATE_MODEL || 'gemini-2.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const keys = collectGeminiKeys();
+  if (keys.length === 0) throw new Error('defina GEMINI_API_KEY no .env (grátis em https://aistudio.google.com/apikey)');
+  const models = collectGeminiModels();
+  const endpoint = (m: string) => `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
+  // matriz (chave x modelo): esgota os 4 modelos de uma chave antes de passar à próxima.
+  let keyIdx = 0;
+  let modelIdx = 0;
   const fn: TranslateFn = async (texts) => {
-    const res = await requestWithRetry(() => fetchWithTimeout(`${url}?key=${key}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt(texts) }] }],
-        // maxOutputTokens alto evita truncar lotes de entradas longas (Abbott-Smith)
-        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 65536, thinkingConfig: { thinkingBudget: 0 } },
-      }),
-    }), 'Gemini');
-    const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    return parse(text, texts.length);
+    for (;;) {
+      const model = models[modelIdx]!;
+      const key = keys[keyIdx]!;
+      try {
+        // maxRetries reduzido (3): se a chave/modelo estiver throttlado (conexões penduradas),
+        // desiste rápido e rotaciona em vez de gastar minutos antes de trocar.
+        const res = await requestWithRetry(() => fetchWithTimeout(`${endpoint(model)}?key=${key}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt(texts) }] }],
+            // maxOutputTokens alto evita truncar lotes de entradas longas (Abbott-Smith)
+            generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 65536, thinkingConfig: { thinkingBudget: 0 } },
+          }),
+        }), 'Gemini', 3);
+        const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        return parse(text, texts.length);
+      } catch (e) {
+        // cota diária esgotada (429 PerDay) ou modelo/chave instável (timeout/rede após retries):
+        // 1) tenta o PRÓXIMO modelo da MESMA chave; 2) esgotados os modelos, vai p/ a PRÓXIMA chave;
+        // 3) esgotadas todas as combinações, propaga (terminal -> para o run e aplica o parcial).
+        const msg = (e as Error).message;
+        const rotatable = /cota diária/i.test(msg) || /falha de rede/i.test(msg);
+        if (rotatable) {
+          const motivo = /cota diária/i.test(msg) ? 'cota esgotada' : 'instável (timeout/rede)';
+          if (modelIdx < models.length - 1) {
+            modelIdx++;
+            process.stdout.write(`\n  chave ${keyIdx + 1}/${keys.length} · modelo "${model}" ${motivo}; tentando "${models[modelIdx]}"\n`);
+            continue;
+          }
+          if (keyIdx < keys.length - 1) {
+            keyIdx++;
+            modelIdx = 0;
+            process.stdout.write(`\n  chave ${keyIdx}/${keys.length} esgotou os ${models.length} modelos; alternando para a chave ${keyIdx + 1}/${keys.length}\n`);
+            continue;
+          }
+        }
+        throw e;
+      }
+    }
   };
-  return { name: 'gemini', model, fn };
+  return { name: `gemini[${keys.length}ch×${models.length}md]`, model: models.join(' › '), fn };
 }
 
 function makeAnthropic(prompt: PromptBuilder, parse: ParseFn = parseArray): Translator {
