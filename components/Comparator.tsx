@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { Book } from '@/lib/corpus';
-import type { ParallelChapter, Translation } from '@/lib/translations';
+import type { Book, Token } from '@/lib/corpus';
+import type { ChapterView, ChapterViewRow } from '@/lib/chapter-view';
+import type { Translation } from '@/lib/translations';
+import { GreekVerse } from './greek/GreekVerse';
+import { TokenSheet } from './greek/TokenSheet';
 import { StudyModal } from './StudyModal';
 
 const TESTAMENT_LABELS: Record<string, string> = {
@@ -12,30 +15,48 @@ const TESTAMENT_LABELS: Record<string, string> = {
   OT: 'Antigo Testamento',
 };
 
+// Fecha um sheet/modal ao pressionar Escape. `aria-modal` promete que o fundo é
+// inerte; o Escape entrega a saída por teclado esperada de um diálogo.
+function useEscapeToClose(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+}
+
 // Monta a URL do comparador preservando as versões selecionadas.
 function compareHref(osis: string, chapter: number, codes: string[]): string {
   const q = codes.length > 0 ? `?v=${codes.join(',')}` : '';
   return `/compare/${osis}/${chapter}${q}`;
 }
 
-// Sheet de navegação: livro + capítulo. Trocar navega para outra rota (novo fetch
-// no servidor), mantendo as versões selecionadas.
+// Sheet de navegação: livro + capítulo + versículo. Trocar de livro/capítulo
+// navega para outra rota (novo fetch no servidor), mantendo as versões
+// selecionadas; o versículo apenas rola a página atual, já renderizada.
 function NavSheet({
   books,
   current,
   chapter,
   chapters,
+  rows,
   codes,
   onClose,
+  onVerse,
 }: {
   books: Book[];
   current: Book;
   chapter: number;
   chapters: number[];
+  rows: ChapterViewRow[];
   codes: string[];
   onClose: () => void;
+  onVerse: (verse: number) => void;
 }) {
   const router = useRouter();
+  useEscapeToClose(onClose);
   const groups = new Map<string, Book[]>();
   for (const b of books) {
     const list = groups.get(b.testament) ?? [];
@@ -87,14 +108,23 @@ function NavSheet({
           ))}
         </div>
 
-        <Link
-          href={`/read/${current.osis_code}/${chapter}`}
-          onClick={onClose}
-          className="mt-6 flex items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-medium transition hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-        >
-          <span aria-hidden>📜</span>
-          Ler interlinear deste capítulo
-        </Link>
+        {rows.length > 0 && (
+          <>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Versículo</p>
+            <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
+              {rows.map((r) => (
+                <button
+                  key={r.verse}
+                  type="button"
+                  onClick={() => onVerse(r.verse)}
+                  className="flex h-9 items-center justify-center rounded-md bg-neutral-100 text-sm transition hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                >
+                  {r.verse}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -115,6 +145,7 @@ function VersionSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
+  useEscapeToClose(onClose);
   const selectedSet = new Set(selected);
 
   const toggle = (code: string) => {
@@ -186,7 +217,7 @@ export function Comparator({
   books,
   allTranslations,
 }: {
-  chapter: ParallelChapter;
+  chapter: ChapterView;
   books: Book[];
   allTranslations: Translation[];
 }) {
@@ -194,8 +225,18 @@ export function Comparator({
   const [navOpen, setNavOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [studyOpen, setStudyOpen] = useState(false);
+  // Token grego selecionado (abre o TokenSheet com os dados linguísticos).
+  const [selected, setSelected] = useState<{ verse: number; token: Token } | null>(null);
+  const [highlight, setHighlight] = useState<number | null>(null);
+  const highlightTimer = useRef<number | null>(null);
+
+  // Limpa o timer do realce ao desmontar, evitando setState após unmount.
+  useEffect(() => () => {
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+  }, []);
 
   const codes = translations.map((t) => t.code);
+  const originalCode = translations.find((t) => t.is_original)?.code ?? null;
   const idx = chapters.indexOf(number);
   const prev = idx > 0 ? chapters[idx - 1] : null;
   const next = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null;
@@ -203,7 +244,19 @@ export function Comparator({
   // colunas dinâmicas: estilo inline (o JIT do Tailwind não gera grid-cols-N
   // arbitrário). Só vale no breakpoint `sm` (sm:grid); no mobile empilha.
   const gridStyle = { gridTemplateColumns: `repeat(${translations.length}, minmax(0, 1fr))` };
-  const isGreek = (code: string) => translations.find((t) => t.code === code)?.is_original ?? false;
+
+  const goToVerse = (verse: number) => {
+    setNavOpen(false);
+    setHighlight(verse);
+    requestAnimationFrame(() => {
+      document.getElementById(`v${verse}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(
+      () => setHighlight((cur) => (cur === verse ? null : cur)),
+      2000,
+    );
+  };
 
   return (
     <div className="mx-auto w-full max-w-5xl">
@@ -215,7 +268,7 @@ export function Comparator({
           type="button"
           onClick={() => setNavOpen(true)}
           className="flex items-center gap-1 text-sm font-semibold transition hover:text-neutral-600 dark:hover:text-neutral-300"
-          aria-label="Selecionar livro e capítulo"
+          aria-label="Selecionar livro, capítulo e versículo"
         >
           {book.name_pt} {number}
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-neutral-400" aria-hidden="true">
@@ -267,35 +320,52 @@ export function Comparator({
         </div>
 
         <div className="flex flex-col">
-          {rows.map((row) => (
-            <div
-              key={row.verse}
-              className="border-b border-neutral-100 py-3 last:border-0 dark:border-neutral-800/60 sm:grid sm:gap-4"
-              style={gridStyle}
-            >
-              {translations.map((t) => {
-                const text = row.texts[t.code] ?? null;
-                return (
-                  <div key={t.code} className="mb-2 last:mb-0 sm:mb-0">
-                    {/* Rótulo da versão por bloco (só mobile, pois empilha). */}
-                    <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-neutral-400 sm:hidden">
-                      {t.name}
-                    </span>
-                    <p className="flex gap-1.5 text-[15px] leading-relaxed">
-                      <span className="mt-0.5 select-none text-xs font-semibold text-neutral-400">
-                        {row.verse}
+          {rows.map((row) => {
+            const activePosition = selected?.verse === row.verse ? selected.token.position : null;
+            return (
+              <div
+                key={row.verse}
+                id={`v${row.verse}`}
+                className={`scroll-mt-20 rounded-md border-b border-neutral-100 py-3 transition-colors duration-500 last:border-0 dark:border-neutral-800/60 sm:grid sm:gap-4 ${
+                  highlight === row.verse ? 'bg-amber-50 dark:bg-amber-900/20' : ''
+                }`}
+                style={gridStyle}
+              >
+                {translations.map((t) => {
+                  const isOriginal = t.code === originalCode;
+                  const text = row.texts[t.code] ?? null;
+                  // Coluna original: tokens gregos clicáveis (interlinear). Cai
+                  // para o texto plano se faltarem tokens naquele versículo.
+                  const originalTokens = isOriginal ? row.tokens : null;
+                  const showTokens = originalTokens != null && originalTokens.length > 0;
+                  return (
+                    <div key={t.code} className="mb-2 last:mb-0 sm:mb-0">
+                      {/* Rótulo da versão por bloco (só mobile, pois empilha). */}
+                      <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-neutral-400 sm:hidden">
+                        {t.name}
                       </span>
-                      {text ? (
-                        <span className={isGreek(t.code) ? 'font-greek' : ''}>{text}</span>
-                      ) : (
-                        <span className="text-neutral-300 dark:text-neutral-600">—</span>
-                      )}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                      <p className="flex items-start gap-1.5 text-[15px] leading-relaxed">
+                        <span className="mt-0.5 select-none text-xs font-semibold text-neutral-400">
+                          {row.verse}
+                        </span>
+                        {showTokens ? (
+                          <GreekVerse
+                            tokens={originalTokens}
+                            activePosition={activePosition}
+                            onSelect={(token) => setSelected({ verse: row.verse, token })}
+                          />
+                        ) : text ? (
+                          <span className={isOriginal ? 'font-greek' : ''}>{text}</span>
+                        ) : (
+                          <span className="text-neutral-300 dark:text-neutral-600">—</span>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
 
         <Attributions translations={translations} />
@@ -307,8 +377,10 @@ export function Comparator({
           current={book}
           chapter={number}
           chapters={chapters}
+          rows={rows}
           codes={codes}
           onClose={() => setNavOpen(false)}
+          onVerse={goToVerse}
         />
       )}
 
@@ -331,6 +403,8 @@ export function Comparator({
           onClose={() => setStudyOpen(false)}
         />
       )}
+
+      {selected && <TokenSheet token={selected.token} onClose={() => setSelected(null)} />}
     </div>
   );
 }

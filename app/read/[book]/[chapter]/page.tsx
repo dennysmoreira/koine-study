@@ -1,32 +1,9 @@
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { getBooks, getChapter } from '@/lib/corpus';
-import { Reader } from '@/components/Reader';
+import { permanentRedirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-
-export default async function ReadPage({
-  params,
-}: {
-  params: { book: string; chapter: string };
-}) {
-  const osis = decodeURIComponent(params.book);
-  const chapterNumber = Number(params.chapter);
-  if (!Number.isInteger(chapterNumber) || chapterNumber < 1) notFound();
-
-  const [chapter, books] = await Promise.all([getChapter(osis, chapterNumber), getBooks()]);
-  if (!chapter || chapter.verses.length === 0) {
-    return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-8">
-        <Link href="/" className="text-sm text-neutral-500 hover:underline">
-          ← Início
-        </Link>
-        <p className="mt-8 text-neutral-500">
-          Capítulo não encontrado para <span className="font-medium">{osis}</span>.
-        </p>
-      </main>
-    );
-  }
-
-  return <Reader chapter={chapter} books={books} />;
+// Unificado no comparador: redireciona o capítulo para /compare já com o grego
+// original selecionado (`?v=grc-sblgnt`), onde a coluna do grego é o interlinear
+// clicável. 308 permanente preserva links antigos do leitor.
+export default function ReadChapterPage({ params }: { params: { book: string; chapter: string } }) {
+  const osis = encodeURIComponent(decodeURIComponent(params.book));
+  permanentRedirect(`/compare/${osis}/${params.chapter}?v=grc-sblgnt`);
 }

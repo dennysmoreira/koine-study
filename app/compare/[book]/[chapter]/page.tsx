@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getBooks } from '@/lib/corpus';
-import { getParallelChapter, getTranslations } from '@/lib/translations';
+import { getTranslations } from '@/lib/translations';
+import { getChapterView } from '@/lib/chapter-view';
 import { Comparator } from '@/components/Comparator';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ export default async function ComparePage({
     : defaultCodes(allTranslations);
 
   const [chapter, books] = await Promise.all([
-    getParallelChapter(osis, chapterNumber, requested),
+    getChapterView(osis, chapterNumber, requested),
     getBooks(),
   ]);
 
