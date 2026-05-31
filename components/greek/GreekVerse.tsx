@@ -18,7 +18,7 @@ export function GreekVerse({
   activePosition: number | null;
 }) {
   return (
-    <span className="font-greek text-lg leading-relaxed">
+    <span className="font-greek">
       {tokens.map((token, i) => (
         <span key={token.position}>
           {i > 0 && ' '}
