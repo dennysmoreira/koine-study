@@ -1,41 +1,13 @@
 'use client';
 
 import type { Token } from '@/lib/corpus';
-import { glossLabel } from '@/lib/morph-labels';
 
-// Token grego clicável: superfície + glosa abaixo. Realça quando é o token ativo
-// (painel aberto). Abre o TokenSheet via `onSelect`.
-function TokenChip({
-  token,
-  onSelect,
-  active,
-}: {
-  token: Token;
-  onSelect: (t: Token) => void;
-  active: boolean;
-}) {
-  const gloss = glossLabel(token);
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(token)}
-      className={`flex flex-col items-center rounded-md px-1.5 py-1 text-center transition ${
-        active ? 'bg-amber-100 dark:bg-amber-900/40' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
-      }`}
-    >
-      <span className="font-greek text-xl leading-tight">{token.surface}</span>
-      {gloss && (
-        <span className="mt-0.5 max-w-[10ch] truncate text-[11px] leading-tight text-neutral-500">
-          {gloss}
-        </span>
-      )}
-    </button>
-  );
-}
-
-// Renderiza a fila de tokens gregos (interlinear) de UM versículo. Cada token é
-// clicável e abre o painel de dados linguísticos. `activePosition` marca qual
-// token está com o painel aberto (estado controlado pelo pai).
+// Renderiza o versículo grego como TEXTO CORRIDO (estilo prosa), não interlinear
+// empilhado: as palavras fluem como uma frase normal e cada uma é clicável,
+// abrindo o TokenSheet com a definição/análise. `activePosition` realça a palavra
+// cujo painel está aberto (estado controlado pelo pai). As superfícies já trazem
+// a pontuação aderida (ex.: "λόγος."), então um espaço simples entre tokens
+// reproduz a leitura natural — e permite a quebra de linha entre palavras.
 export function GreekVerse({
   tokens,
   onSelect,
@@ -46,14 +18,22 @@ export function GreekVerse({
   activePosition: number | null;
 }) {
   return (
-    <span className="flex flex-wrap items-start gap-x-1 gap-y-1">
-      {tokens.map((token) => (
-        <TokenChip
-          key={token.position}
-          token={token}
-          onSelect={onSelect}
-          active={activePosition === token.position}
-        />
+    <span className="font-greek text-lg leading-relaxed">
+      {tokens.map((token, i) => (
+        <span key={token.position}>
+          {i > 0 && ' '}
+          <button
+            type="button"
+            onClick={() => onSelect(token)}
+            className={`inline cursor-pointer rounded px-0.5 transition ${
+              activePosition === token.position
+                ? 'bg-amber-100 dark:bg-amber-900/40'
+                : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            {token.surface}
+          </button>
+        </span>
       ))}
     </span>
   );
