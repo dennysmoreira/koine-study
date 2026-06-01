@@ -12,6 +12,8 @@ import { TokenSheet } from './greek/TokenSheet';
 import { HebrewVerse } from './hebrew/HebrewVerse';
 import { HebrewWordSheet } from './hebrew/HebrewWordSheet';
 import { StudyModal } from './StudyModal';
+import { VerseSelectionBar } from './VerseSelectionBar';
+import type { ReferenceInput } from '@/app/study/actions';
 
 const TESTAMENT_LABELS: Record<string, string> = {
   NT: 'Novo Testamento',
@@ -279,6 +281,10 @@ export function Comparator({
   const [navOpen, setNavOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [studyOpen, setStudyOpen] = useState(false);
+  // Modo de seleção de versículos (para citar/explicar). Quando ativo, cada linha
+  // ganha uma caixa de seleção; a barra de ação aparece com 1+ selecionados.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedVerses, setSelectedVerses] = useState<Set<number>>(new Set());
   // Token grego selecionado (abre o TokenSheet com os dados linguísticos).
   const [selected, setSelected] = useState<{ verse: number; token: Token } | null>(null);
   // Palavra hebraica selecionada (abre o HebrewWordSheet, breakdown por morfema).
@@ -319,6 +325,25 @@ export function Comparator({
     );
   };
 
+  const toggleVerse = (verse: number) => {
+    setSelectedVerses((prev) => {
+      const next = new Set(prev);
+      if (next.has(verse)) next.delete(verse);
+      else next.add(verse);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedVerses(new Set());
+  };
+
+  // Referências selecionadas, prontas para as server actions (ordenadas por versículo).
+  const selectedReferences: ReferenceInput[] = rows
+    .filter((r) => selectedVerses.has(r.verse))
+    .map((r) => ({ ref: r.ref, osis: book.osis_code, bookName: book.name_pt, chapter: number, verse: r.verse }));
+
   return (
     <div className="mx-auto w-full max-w-5xl">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50/90 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
@@ -347,6 +372,19 @@ export function Comparator({
           </button>
           <button
             type="button"
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            className={`rounded-md px-2 py-1 transition ${
+              selectMode
+                ? 'bg-amber-100 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100'
+                : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
+            }`}
+            aria-pressed={selectMode}
+            aria-label="Selecionar versículos"
+          >
+            {selectMode ? 'Cancelar' : 'Selecionar'}
+          </button>
+          <button
+            type="button"
             onClick={() => setVersionsOpen(true)}
             className="rounded-md px-2 py-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
             aria-label="Escolher versões"
@@ -370,7 +408,7 @@ export function Comparator({
         </div>
       </header>
 
-      <main className="px-4 py-5">
+      <main className={`px-4 py-5 ${selectMode ? 'pb-24' : ''}`}>
         {/* Cabeçalho de colunas (só desktop): nomes das versões alinhados às colunas. */}
         <div className="mb-2 hidden sm:grid sm:gap-4" style={gridStyle}>
           {translations.map((t) => (
@@ -385,15 +423,33 @@ export function Comparator({
             const activePosition = selected?.verse === row.verse ? selected.token.position : null;
             const activeHebrewPosition =
               selectedHebrew?.verse === row.verse ? selectedHebrew.word.position : null;
+            const isSelected = selectedVerses.has(row.verse);
             return (
               <div
                 key={row.verse}
                 id={`v${row.verse}`}
-                className={`scroll-mt-20 rounded-md border-b border-neutral-100 py-3 transition-colors duration-500 last:border-0 dark:border-neutral-800/60 sm:grid sm:gap-4 ${
-                  highlight === row.verse ? 'bg-amber-50 dark:bg-amber-900/20' : ''
+                className={`scroll-mt-20 rounded-md border-b border-neutral-100 py-3 transition-colors duration-500 last:border-0 dark:border-neutral-800/60 ${
+                  selectMode ? 'flex gap-3' : ''
+                } ${highlight === row.verse ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${
+                  isSelected ? 'bg-amber-50/70 dark:bg-amber-900/10' : ''
                 }`}
-                style={gridStyle}
               >
+                {selectMode && (
+                  <button
+                    type="button"
+                    onClick={() => toggleVerse(row.verse)}
+                    aria-pressed={isSelected}
+                    aria-label={`Selecionar versículo ${row.verse}`}
+                    className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs transition ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-500 text-white'
+                        : 'border-neutral-300 text-transparent hover:border-amber-400 dark:border-neutral-600'
+                    }`}
+                  >
+                    ✓
+                  </button>
+                )}
+                <div className="min-w-0 flex-1 sm:grid sm:gap-4" style={gridStyle}>
                 {translations.map((t) => {
                   const isOriginal = t.code === originalCode;
                   const text = row.texts[t.code] ?? null;
@@ -446,6 +502,7 @@ export function Comparator({
                     </div>
                   );
                 })}
+                </div>
               </div>
             );
           })}
@@ -491,6 +548,15 @@ export function Comparator({
 
       {selectedHebrew && (
         <HebrewWordSheet word={selectedHebrew.word} onClose={() => setSelectedHebrew(null)} />
+      )}
+
+      {selectMode && selectedReferences.length > 0 && (
+        <VerseSelectionBar
+          references={selectedReferences}
+          bookName={book.name_pt}
+          chapter={number}
+          onClear={exitSelectMode}
+        />
       )}
     </div>
   );

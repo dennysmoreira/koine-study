@@ -74,6 +74,322 @@ export async function saveStudy(input: SaveStudyInput): Promise<SaveStudyResult>
   return { ok: true, id: (data as { id: number }).id };
 }
 
+// ── Workspace conversacional ───────────────────────────────────────────────
+
+export interface CreateStudyInput {
+  title?: string;
+  mode?: string;
+  osis?: string | null;
+  chapter?: number | null;
+  bookName?: string | null;
+  codes?: string[];
+  // Referências iniciais (ex.: versículos selecionados no comparador).
+  references?: Array<{ ref: string; osis: string; bookName: string; chapter: number; verse: number }>;
+}
+
+/**
+ * Cria um estudo-workspace (conteúdo vazio; a conversa vive em study_messages).
+ * Opcionalmente já anexa referências bíblicas (fluxo "adicionar versículos a um
+ * novo estudo" do comparador). Retorna o id criado.
+ */
+export async function createStudy(input: CreateStudyInput = {}): Promise<SaveStudyResult> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Faça login para criar estudos.' };
+
+  const mode = isStudyMode(input.mode) ? input.mode : 'free';
+  const title = input.title?.trim() || 'Novo estudo';
+
+  const { data, error } = await supabase
+    .from('saved_studies')
+    .insert({
+      user_id: user.id,
+      osis: input.osis ?? null,
+      chapter: input.chapter ?? null,
+      book_name: input.bookName ?? null,
+      mode,
+      title: title.slice(0, 120),
+      codes: input.codes ?? [],
+      content: null,
+    })
+    .select('id')
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? 'Falha ao criar.' };
+
+  const studyId = (data as { id: number }).id;
+
+  // Valida na fronteira: a action é exportada e chamável fora do comparador;
+  // descarta referências malformadas em vez de gravar lixo em study_references.
+  const refs = (input.references ?? []).filter(
+    (r) =>
+      !!r &&
+      typeof r.ref === 'string' &&
+      r.ref.length > 0 &&
+      typeof r.osis === 'string' &&
+      r.osis.length > 0 &&
+      Number.isInteger(r.chapter) &&
+      Number.isInteger(r.verse),
+  );
+  if (refs.length > 0) {
+    const rows = refs.map((r) => ({
+      study_id: studyId,
+      user_id: user.id,
+      ref: r.ref,
+      osis: r.osis,
+      book_name: r.bookName,
+      chapter: r.chapter,
+      verse: r.verse,
+    }));
+    // ignoreDuplicates: unique(study_id, ref) — versículos repetidos não duplicam.
+    await supabase.from('study_references').upsert(rows, { onConflict: 'study_id,ref', ignoreDuplicates: true });
+  }
+
+  revalidatePath('/studies');
+  return { ok: true, id: studyId };
+}
+
+// Confirma que o estudo pertence ao usuário logado. As tabelas-filha têm RLS por
+// user_id, mas isso não impede anexar a um study_id alheio; este guard fecha o furo.
+async function assertOwnsStudy(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  studyId: number,
+): Promise<boolean> {
+  const { data } = await supabase.from('saved_studies').select('id').eq('id', studyId).maybeSingle();
+  return !!data; // RLS já filtra por dono; se veio linha, é do usuário
+}
+
+/** Adiciona uma referência bíblica (versículo da base) ao estudo. */
+export async function addStudyReference(
+  studyId: number,
+  ref: { ref: string; osis: string; bookName: string; chapter: number; verse: number },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(studyId)) return { ok: false, error: 'Id inválido.' };
+  if (!ref.ref || !ref.osis) return { ok: false, error: 'Referência inválida.' };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+
+  const { error } = await supabase.from('study_references').upsert(
+    {
+      study_id: studyId,
+      user_id: user.id,
+      ref: ref.ref,
+      osis: ref.osis,
+      book_name: ref.bookName,
+      chapter: ref.chapter,
+      verse: ref.verse,
+    },
+    { onConflict: 'study_id,ref', ignoreDuplicates: true },
+  );
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/studies/${studyId}`);
+  return { ok: true };
+}
+
+export interface ReferenceInput {
+  ref: string;
+  osis: string;
+  bookName: string;
+  chapter: number;
+  verse: number;
+}
+
+export interface StudyOption {
+  id: number;
+  title: string;
+}
+
+/** Lista os estudos do usuário (id + título) para o seletor "adicionar a um estudo". */
+export async function listMyStudies(): Promise<StudyOption[]> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from('saved_studies')
+    .select('id, title')
+    .order('created_at', { ascending: false });
+  if (error || !data) return [];
+  return (data as Array<{ id: number; title: string }>).map((r) => ({ id: r.id, title: r.title }));
+}
+
+/**
+ * Anexa em LOTE versículos a um estudo existente (fluxo "adicionar ao estudo" do
+ * comparador). ignoreDuplicates evita citar o mesmo versículo duas vezes.
+ */
+export async function addReferencesToStudy(
+  studyId: number,
+  references: ReferenceInput[],
+): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(studyId)) return { ok: false, error: 'Id inválido.' };
+  if (references.length === 0) return { ok: false, error: 'Nenhum versículo selecionado.' };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+
+  const rows = references.map((r) => ({
+    study_id: studyId,
+    user_id: user.id,
+    ref: r.ref,
+    osis: r.osis,
+    book_name: r.bookName,
+    chapter: r.chapter,
+    verse: r.verse,
+  }));
+  const { error } = await supabase
+    .from('study_references')
+    .upsert(rows, { onConflict: 'study_id,ref', ignoreDuplicates: true });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/studies/${studyId}`);
+  return { ok: true };
+}
+
+/** Remove uma referência do estudo (RLS garante propriedade). */
+export async function removeStudyReference(id: number): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(id)) return { ok: false, error: 'Id inválido.' };
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+
+  const { error } = await supabase.from('study_references').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// Teto de caracteres de uma fonte de texto inline (fronteira de confiança no
+// servidor; evita gravar uma linha gigante em study_sources).
+const MAX_TEXT_SOURCE_CHARS = 50000;
+
+/** Adiciona uma fonte de texto inline (anotação/trecho) ao estudo. */
+export async function addTextSource(
+  studyId: number,
+  title: string,
+  content: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(studyId)) return { ok: false, error: 'Id inválido.' };
+  const cleanTitle = title?.trim();
+  const cleanContent = content?.trim();
+  if (!cleanContent) return { ok: false, error: 'Conteúdo vazio.' };
+  if (cleanContent.length > MAX_TEXT_SOURCE_CHARS) {
+    return { ok: false, error: 'Texto muito longo (máx. 50.000 caracteres).' };
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+
+  const { error } = await supabase.from('study_sources').insert({
+    study_id: studyId,
+    user_id: user.id,
+    kind: 'text',
+    title: (cleanTitle || 'Anotação').slice(0, 200),
+    content: cleanContent,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/studies/${studyId}`);
+  return { ok: true };
+}
+
+// Tamanho máximo aceito para upload de arquivo-fonte (10 MB). Defesa no servidor;
+// o input do cliente também filtra, mas a action é a fronteira de confiança.
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Anexa uma fonte do tipo arquivo: sobe o binário ao bucket privado 'study-sources'
+ * sob o prefixo "<user_id>/<studyId>/..." (a RLS do Storage exige que o 1º segmento
+ * do path seja o auth.uid()) e registra a fonte em study_sources (kind='file').
+ */
+export async function addFileSource(
+  studyId: number,
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(studyId)) return { ok: false, error: 'Id inválido.' };
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'Selecione um arquivo.' };
+  if (file.size > MAX_FILE_BYTES) return { ok: false, error: 'Arquivo acima de 10 MB.' };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+
+  // Sanitiza o nome e prefixa com timestamp para evitar colisão/path traversal.
+  const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-80) || 'arquivo';
+  const path = `${user.id}/${studyId}/${Date.now()}-${safeName}`;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+
+  const { error: upErr } = await supabase.storage
+    .from('study-sources')
+    .upload(path, bytes, { contentType: file.type || 'application/octet-stream', upsert: false });
+  if (upErr) return { ok: false, error: upErr.message };
+
+  const { error } = await supabase.from('study_sources').insert({
+    study_id: studyId,
+    user_id: user.id,
+    kind: 'file',
+    title: (file.name || 'Arquivo').slice(0, 200),
+    storage_path: path,
+    mime_type: file.type || null,
+    byte_size: file.size,
+  });
+  if (error) {
+    // Falhou o registro: remove o objeto órfão do Storage para não vazar espaço.
+    await supabase.storage.from('study-sources').remove([path]);
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/studies/${studyId}`);
+  return { ok: true };
+}
+
+/** Remove uma fonte do estudo (RLS garante propriedade). */
+export async function removeStudySource(id: number): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(id)) return { ok: false, error: 'Id inválido.' };
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+
+  // Apaga o objeto no Storage se for arquivo (o registro some via delete abaixo).
+  const { data: src } = await supabase
+    .from('study_sources')
+    .select('kind, storage_path')
+    .eq('id', id)
+    .maybeSingle();
+  const row = src as { kind: string; storage_path: string | null } | null;
+  if (row?.kind === 'file' && row.storage_path) {
+    await supabase.storage.from('study-sources').remove([row.storage_path]);
+  }
+
+  const { error } = await supabase.from('study_sources').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function deleteStudy(id: number): Promise<{ ok: boolean; error?: string }> {
   if (!Number.isInteger(id)) return { ok: false, error: 'Id inválido.' };
 

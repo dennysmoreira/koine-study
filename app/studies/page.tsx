@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getSavedStudies } from '@/lib/saved-studies';
 import { getStudyMode } from '@/lib/study-modes';
+import { NewStudyButton } from '@/components/NewStudyButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +19,12 @@ export default async function StudiesPage() {
         <span className="text-xs text-neutral-500">{studies.length} salvos</span>
       </header>
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Estudos salvos</h1>
-        <p className="text-sm text-neutral-500">Os textos que você gerou no comparador com IA.</p>
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Estudos salvos</h1>
+          <p className="text-sm text-neutral-500">Seus workspaces e os textos gerados no comparador com IA.</p>
+        </div>
+        <NewStudyButton />
       </div>
 
       {studies.length === 0 ? (
@@ -52,7 +56,8 @@ export default async function StudiesPage() {
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-base font-medium">{s.title}</span>
                     <span className="truncate text-sm text-neutral-500">
-                      {meta.label} · {s.bookName} {s.chapter}
+                      {meta.label}
+                      {s.bookName && s.chapter ? ` · ${s.bookName} ${s.chapter}` : ''}
                     </span>
                   </span>
                   <span className="ml-auto shrink-0 text-xs text-neutral-400">
