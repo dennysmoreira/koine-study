@@ -346,7 +346,7 @@ export function Comparator({
 
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50/90 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
+      <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-neutral-200 bg-neutral-50/90 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
         <Link href="/" className="text-sm text-neutral-500 hover:underline">
           ← Início
         </Link>
@@ -361,7 +361,7 @@ export function Comparator({
             <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clipRule="evenodd" />
           </svg>
         </button>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 whitespace-nowrap text-sm">
           <button
             type="button"
             onClick={() => setStudyOpen(true)}

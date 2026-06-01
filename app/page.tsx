@@ -89,8 +89,8 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <div>
+      <header className="mb-8 flex items-start justify-between gap-2 sm:gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Koiné Study</h1>
           <p className="text-sm text-neutral-500">Aprenda grego koiné do zero.</p>
         </div>
