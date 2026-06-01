@@ -22,11 +22,14 @@ interface Attempt {
   model: string;
 }
 
-// Modelos Gemini, em ordem de preferência (qualidade → maior cota). Os 2.0 foram
-// desativados pelo Google em 2026-06-01 e por isso saíram da cadeia.
+// Modelos Gemini, em ordem de preferência. Cada modelo tem cota diária (RPD)
+// INDEPENDENTE no free tier, então listar vários multiplica o teto diário efetivo
+// da chave: quando o 1º estoura (HTTP 429), o failover desce para o próximo.
+// Ordem: qualidade de ponta (3.5-flash) → cota generosa (3.1-flash-lite, ~500/dia)
+// → 2.5 como rede. Os 2.0 foram desativados pelo Google em 2026-06-01.
 const GEMINI_MODELS = splitEnv(
   process.env.GEMINI_GEN_MODELS,
-  'gemini-2.5-flash,gemini-2.5-flash-lite',
+  'gemini-3.5-flash,gemini-3.1-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite',
 );
 
 // Modelos Groq (free tier generoso, API OpenAI-compat). 70b para qualidade, 8b
@@ -98,9 +101,16 @@ function buildAttempts(userGeminiKey?: string | null): Attempt[] {
 
 function geminiRequest(a: Attempt, opts: ChatGenOptions, temperature: number, maxTokens: number) {
   const generationConfig: Record<string, unknown> = { temperature, maxOutputTokens: maxTokens };
-  // Nos 2.5 o "thinking" liga por padrão e consome o orçamento de saída ANTES do
-  // texto visível, truncando a resposta. Geramos texto corrido — desligamos.
-  if (a.model.includes('2.5')) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  // O "thinking" liga por padrão e consome o orçamento de saída ANTES do texto
+  // visível, truncando a resposta. Geramos texto corrido — minimizamos por versão:
+  //  - 2.5: thinkingBudget = 0 (desliga por completo; param exclusivo dos 2.5).
+  //  - 3.x: thinkingLevel = 'minimal' (3.x não desliga de vez; 'minimal' ~ não pensa.
+  //         Usar thinkingBudget nos 3.x não é suportado).
+  if (a.model.includes('2.5')) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  } else if (/gemini-3/.test(a.model)) {
+    generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
+  }
   return {
     url: `https://generativelanguage.googleapis.com/v1beta/models/${a.model}:streamGenerateContent?alt=sse&key=${a.key}`,
     headers: { 'content-type': 'application/json' },
