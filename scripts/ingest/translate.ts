@@ -37,6 +37,7 @@ interface Translator { name: string; model: string; fn: TranslateFn }
 
 const BATCH = Number(process.env.TRANSLATE_BATCH ?? 100); // lotes maiores = menos requisições (útil no free tier de 20 req/dia)
 const LEXICON_BATCH = Number(process.env.TRANSLATE_LEXICON_BATCH ?? 10); // Abbott-Smith: entradas longas -> lotes menores p/ não estourar o output
+const HEBREW_BDB_BATCH = Number(process.env.TRANSLATE_HEBREW_BDB_BATCH ?? 40); // BDB: listas de glosas (médias) -> lote intermediário
 // LSJ: entradas variam de ~200B a ~16KB. Lote por conta de caracteres (não de
 // itens), senão um punhado de entradas longas estoura o output do modelo (Anthropic
 // max_tokens=8192). Orçamento conservador (~4k chars de ENTRADA por lote) deixa
@@ -105,6 +106,44 @@ function buildPrompt(texts: string[]): string {
     'Regras:',
     '- Preserve o sentido lexical/teológico e mantenha conciso (estilo de dicionário).',
     '- Não adicione explicações, comentários nem numeração.',
+    '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
+    '',
+    'Entrada:',
+    JSON.stringify(texts),
+  ].join('\n');
+}
+
+// glosa Strong's HEBRAICA: traduz a definição lexical EN -> PT de forma FIEL
+// (não condensa — o usuário quer mais informação no painel), preservando a
+// pontuação estrutural (";") e sem transliterar palavras hebraicas/gregas.
+function buildHebrewGlossPrompt(texts: string[]): string {
+  return [
+    'Você é um tradutor especializado em léxico de hebraico bíblico (Strong\'s).',
+    'Traduza para português (PT-BR) cada definição lexical do array JSON a seguir.',
+    'Regras:',
+    '- Preserve o sentido lexical/teológico; traduza de forma fiel e concisa (estilo de dicionário), sem expandir nem resumir.',
+    '- Preserve a pontuação estrutural da definição (ex.: ";", parênteses).',
+    '- NÃO translitere nem traduza palavras hebraicas ou gregas que apareçam — mantenha-as como estão.',
+    '- Não adicione explicações, comentários nem numeração.',
+    '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
+    '',
+    'Entrada:',
+    JSON.stringify(texts),
+  ].join('\n');
+}
+
+// definição BDB HEBRAICA: uma lista de glosas curtas unidas por "; "
+// (ex.: "rulers; judges; divine ones"). Traduz cada glosa, preservando o "; ".
+function buildHebrewBdbPrompt(texts: string[]): string {
+  return [
+    'Você é um tradutor especializado em léxicos de hebraico bíblico (Brown-Driver-Briggs).',
+    'Cada item do array JSON a seguir é uma LISTA de glosas curtas unidas por "; ".',
+    'Traduza para português (PT-BR) cada glosa, mantendo a estrutura.',
+    'Regras:',
+    '- Traduza cada glosa de forma concisa (estilo de dicionário) e mantenha o separador "; " entre elas.',
+    '- Preserve a ordem das glosas dentro de cada item.',
+    '- NÃO translitere nem traduza palavras hebraicas ou gregas que apareçam.',
+    '- Não adicione comentários, títulos nem numeração.',
     '- Responda APENAS com um array JSON de strings, na MESMA ordem e tamanho da entrada.',
     '',
     'Entrada:',
@@ -411,6 +450,138 @@ export async function translate(buildDir: string): Promise<void> {
   });
   process.stdout.write(`\r  aplicados no banco: ${applied}/${entries.length}\n`);
   console.log('glosas PT aplicadas ao Supabase.');
+}
+
+/**
+ * Traduz UM campo do léxico hebraico (EN -> PT-BR) e aplica em public.lemmas
+ * por Strong's. Compartilhado por translateHebrew para gloss_en->gloss_pt e
+ * bdb_def->bdb_def_pt: mesmo loop resumível, prompt e coluna parametrizados.
+ *
+ * Idempotente/resumível: cache próprio por campo (Strong's -> texto PT), gravado
+ * a cada lote. A etapa de apply relê o cache (não o banco) e atualiza por Strong's.
+ */
+async function translateHebrewField(
+  client: any,
+  opts: {
+    label: string;
+    cachePath: string;
+    column: 'gloss_pt' | 'bdb_def_pt';
+    prompt: PromptBuilder;
+    batch: number;
+    rows: Array<{ strongs: string; text: string }>;
+  },
+): Promise<void> {
+  const { label, cachePath, column, prompt, batch, rows } = opts;
+  const done: Record<string, string> = existsSync(cachePath)
+    ? JSON.parse(readFileSync(cachePath, 'utf8'))
+    : {};
+  const pending = rows.filter((r) => !(r.strongs in done));
+  console.log(`${label}: ${pending.length} a traduzir (em cache: ${Object.keys(done).length})`);
+
+  if (pending.length > 0) {
+    const { name, model, fn } = getTranslator(prompt);
+    console.log(`  provider: ${name} (${model}), lote=${batch}, intervalo=${SLEEP_MS}ms`);
+    try {
+      for (let i = 0; i < pending.length; i += batch) {
+        const chunk = pending.slice(i, i + batch);
+        const inputs = chunk.map((r) => r.text);
+        let out: string[] | undefined;
+        for (let r = 0; r < 3; r++) {
+          try { out = await fn(inputs); break; }
+          catch (e) {
+            // cota DIÁRIA é fatal: re-lança p/ parar o run e aplicar o parcial.
+            if (/cota diária/i.test((e as Error).message)) throw e;
+            if (r === 2) {
+              // Erro de CONTEÚDO (JSON truncado, contagem divergente) costuma ser do
+              // lote (tamanho/sorte) e não da fonte: PULA este lote e segue — senão um
+              // único lote ruim abortaria milhares de itens seguintes. Não cacheado,
+              // logo um run de resume reprocessa só os pulados.
+              process.stdout.write(`\n  ${label} lote @${i} descartado apos 3 tentativas (${(e as Error).message}); seguindo\n`);
+              break;
+            }
+            process.stdout.write(`\n  ${label} lote @${i} inválido (${(e as Error).message}); re-tentando ${r + 1}/2\n`);
+            await sleep(2000);
+          }
+        }
+        // não cacheia vazios/pulados: ficam pendentes p/ re-tentar na próxima execução
+        if (out) chunk.forEach((r, j) => { const t = out![j]; if (t) done[r.strongs] = t; });
+        writeFileSync(cachePath, JSON.stringify(done), 'utf8'); // checkpoint por lote
+        process.stdout.write(`\r  ${label} traduzidos: ${Math.min(i + batch, pending.length)}/${pending.length}`);
+        if (i + batch < pending.length && SLEEP_MS > 0) await sleep(SLEEP_MS);
+      }
+      process.stdout.write('\n');
+    } catch (e) {
+      process.stdout.write('\n');
+      console.warn(`${label}: tradução interrompida: ${(e as Error).message}`);
+      console.warn(`  progresso salvo no cache: ${Object.keys(done).length}. Reexecute para retomar.`);
+    }
+  }
+
+  // aplica por Strong's (UPDATE idempotente, sobrevive a rebuilds); concorrência limitada
+  const entries = Object.entries(done).filter(([, t]) => t);
+  let applied = 0;
+  await pMap(entries, UPDATE_CONCURRENCY, async ([strongs, text]) => {
+    const { error } = await (client.from('lemmas') as any).update({ [column]: text }).eq('strongs', strongs);
+    if (error) throw new Error(`update lemma ${strongs} (${column}): ${error.message}`);
+    if (++applied % 200 === 0) process.stdout.write(`\r  ${label} aplicados no banco: ${applied}/${entries.length}`);
+  });
+  process.stdout.write(`\r  ${label} aplicados no banco: ${applied}/${entries.length}\n`);
+}
+
+/**
+ * Traduz o léxico HEBRAICO (EN -> PT-BR) e aplica em public.lemmas:
+ *   - gloss_en -> gloss_pt    (definição curta do Strong's)
+ *   - bdb_def  -> bdb_def_pt  (glosas BDB unidas por "; ")
+ *
+ * Diferente de translate()/translateLexicon() (que leem do build do GREGO,
+ * data/build/lemmas.json, frequency>0), o hebraico não passa pelo build de
+ * corpus (frequency=0) e vive só no banco. Por isso este passo LÊ os lemas
+ * hebraicos direto do Supabase (strongs like 'H%') e usa prompts próprios.
+ */
+export async function translateHebrew(buildDir: string): Promise<void> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no .env');
+  const client = createClient(url, key, { auth: { persistSession: false } });
+
+  // lê todos os lemas hebraicos (Strong's H####) com gloss_en e bdb_def, paginado
+  // (cap default do PostgREST é 1000; sem paginar truncaria silenciosamente).
+  const PAGE = 1000;
+  const lemmas: Array<{ strongs: string; gloss_en: string | null; bdb_def: string | null }> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await (client.from('lemmas') as any)
+      .select('strongs,gloss_en,bdb_def')
+      .like('strongs', 'H%')
+      .order('strongs', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`leitura de lemmas hebraicos: ${error.message}`);
+    const rows = data as typeof lemmas;
+    lemmas.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  console.log(`lemas hebraicos: ${lemmas.length}`);
+
+  await translateHebrewField(client, {
+    label: 'glosa',
+    cachePath: join(buildDir, 'hebrew-gloss.pt.json'),
+    column: 'gloss_pt',
+    prompt: buildHebrewGlossPrompt,
+    batch: BATCH,
+    rows: lemmas
+      .filter((l) => l.gloss_en)
+      .map((l) => ({ strongs: l.strongs, text: l.gloss_en as string })),
+  });
+
+  await translateHebrewField(client, {
+    label: 'BDB',
+    cachePath: join(buildDir, 'hebrew-bdb.pt.json'),
+    column: 'bdb_def_pt',
+    prompt: buildHebrewBdbPrompt,
+    batch: HEBREW_BDB_BATCH,
+    rows: lemmas
+      .filter((l) => l.bdb_def)
+      .map((l) => ({ strongs: l.strongs, text: l.bdb_def as string })),
+  });
 }
 
 // orçamento de chars por lote e truncagem por entrada da derivação de glosa.

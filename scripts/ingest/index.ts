@@ -27,7 +27,7 @@ import { parse } from 'csv-parse/sync';
 import { createClient } from '@supabase/supabase-js';
 import { decodeMorph } from './morph-decoder.ts';
 import { BOOKS, normalizeStrongs } from './books.ts';
-import { translate, translateLexicon, translateLexiconEntries, deriveGloss, localizeRefs } from './translate.ts';
+import { translate, translateLexicon, translateLexiconEntries, deriveGloss, localizeRefs, translateHebrew } from './translate.ts';
 import { parseAbbottSmith } from './abbott-smith.ts';
 import { parseDodson } from './dodson.ts';
 import { downloadMacula, buildMacula } from './macula.ts';
@@ -40,6 +40,7 @@ import { convertBibleJson } from './bible-json.ts';
 import { downloadHebrew, ingestHebrew } from './hebrew-wlc.ts';
 import { ingestThiagobodruk } from './thiagobodruk.ts';
 import { ingestHebrewStrongs } from './hebrew-strongs.ts';
+import { ingestHebrewBdb } from './hebrew-bdb.ts';
 import { ingestHebrewInterlinear } from './hebrew-interlinear.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -416,7 +417,9 @@ async function main(): Promise<void> {
   if (step === 'ingest-hebrew') return void (await ingestHebrew());
   if (step === 'ingest-thiagobodruk') return void (await ingestThiagobodruk(arg('code')));
   if (step === 'ingest-hebrew-lexicon') return void (await ingestHebrewStrongs());
+  if (step === 'ingest-hebrew-bdb') return void (await ingestHebrewBdb());
   if (step === 'ingest-hebrew-interlinear') return void (await ingestHebrewInterlinear());
+  if (step === 'translate-hebrew') return void (await translateHebrew(BUILD));
   // padrão: download + build
   await download();
   build();

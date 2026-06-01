@@ -19,7 +19,10 @@ export interface HebrewMorpheme {
   strongs: string | null; // Strong's "H####" | null (prefixos não têm)
   code: string | null; // código OSHM (com prefixo de língua H/A) | null
   lemmaForm: string | null; // forma hebraica do dicionário (de `lemmas`)
+  xlit: string | null; // transliteração acadêmica (ex.: "bârâʼ")
+  pron: string | null; // pronúncia figurada do Strong's (ex.: "baw-raw'")
   gloss: string | null; // glosa curta (gloss_pt ?? gloss_en)
+  bdbDef: string | null; // definição BDB concisa (bdb_def_pt ?? bdb_def)
 }
 
 export interface HebrewWord {
@@ -59,10 +62,16 @@ interface RawHebrewWord {
 const CORPUS_CACHE = { revalidate: 60 * 60 * 24, tags: ['corpus'] };
 
 /** Mapa Strong's → { forma, glosa } a partir de `lemmas`, para os Strong's dados. */
-async function fetchLemmaIndex(
-  strongsList: string[],
-): Promise<Map<string, { form: string; gloss: string | null }>> {
-  const index = new Map<string, { form: string; gloss: string | null }>();
+interface LemmaInfo {
+  form: string;
+  xlit: string | null;
+  pron: string | null;
+  gloss: string | null;
+  bdbDef: string | null;
+}
+
+async function fetchLemmaIndex(strongsList: string[]): Promise<Map<string, LemmaInfo>> {
+  const index = new Map<string, LemmaInfo>();
   if (strongsList.length === 0) return index;
 
   // PostgREST limita o payload; busca em fatias para não estourar a URL com `in`.
@@ -71,17 +80,28 @@ async function fetchLemmaIndex(
     const slice = strongsList.slice(i, i + SLICE);
     const { data, error } = await supabase
       .from('lemmas')
-      .select('lemma,gloss_pt,gloss_en,strongs')
+      .select('lemma,xlit,pron,gloss_pt,gloss_en,bdb_def,bdb_def_pt,strongs')
       .in('strongs', slice);
     if (error) throw new Error(`getHebrewChapter lemmas: ${error.message}`);
     for (const r of (data ?? []) as Array<{
       lemma: string;
+      xlit: string | null;
+      pron: string | null;
       gloss_pt: string | null;
       gloss_en: string | null;
+      bdb_def: string | null;
+      bdb_def_pt: string | null;
       strongs: string | null;
     }>) {
       if (!r.strongs || index.has(r.strongs)) continue; // 1ª entrada por Strong's (homógrafos)
-      index.set(r.strongs, { form: r.lemma, gloss: r.gloss_pt ?? r.gloss_en });
+      index.set(r.strongs, {
+        form: r.lemma,
+        xlit: r.xlit,
+        pron: r.pron,
+        // prefere PT; cai para EN enquanto a tradução do léxico hebraico não cobre tudo
+        gloss: r.gloss_pt ?? r.gloss_en,
+        bdbDef: r.bdb_def_pt ?? r.bdb_def,
+      });
     }
   }
   return index;
@@ -119,7 +139,10 @@ async function fetchHebrewChapter(osis: string, chapter: number): Promise<Hebrew
         strongs: m.g,
         code: m.m,
         lemmaForm: lex?.form ?? null,
+        xlit: lex?.xlit ?? null,
+        pron: lex?.pron ?? null,
         gloss: lex?.gloss ?? null,
+        bdbDef: lex?.bdbDef ?? null,
       };
     });
     const word: HebrewWord = { position: w.position, surface: w.surface, morphemes };

@@ -7,7 +7,8 @@ import { decodeHebrewMorpheme, hebrewParsingLabel } from '@/lib/hebrew-morph';
 // Painel inferior com os dados linguísticos de uma palavra hebraica. Diferente do
 // grego (1 token = 1 lema/morfologia), a palavra hebraica é MULTI-MORFEMA, então
 // listamos um bloco por morfema (prefixo ו/ה/ב, raiz, sufixo pronominal), cada um
-// com superfície, lema do dicionário, Strong's, análise OSHM e glosa. Os códigos
+// com superfície, transliteração/pronúncia, lema do dicionário, Strong's, análise
+// OSHM e glosa (em PT quando traduzida; cai para EN enquanto não). Os códigos
 // OSHM já vêm com o prefixo de língua (H/A), logo cada morfema se autodecodifica
 // (lib/hebrew-morph.ts) — o banco fica enxuto e os rótulos têm fonte única.
 export function HebrewWordSheet({ word, onClose }: { word: HebrewWord; onClose: () => void }) {
@@ -58,6 +59,15 @@ export function HebrewWordSheet({ word, onClose }: { word: HebrewWord; onClose: 
                   {m.strongs && <span className="text-xs text-neutral-400">Strong {m.strongs}</span>}
                 </div>
 
+                {(m.xlit || m.pron) && (
+                  <p className="mt-1 text-sm text-neutral-500">
+                    {m.xlit && (
+                      <span className="italic text-neutral-700 dark:text-neutral-200">{m.xlit}</span>
+                    )}
+                    {m.pron && <span className="ml-2 text-neutral-400">/{m.pron}/</span>}
+                  </p>
+                )}
+
                 {(m.lemmaForm || m.lemmaRaw) && (
                   <p className="mt-1 text-sm text-neutral-500">
                     Lema:{' '}
@@ -68,6 +78,12 @@ export function HebrewWordSheet({ word, onClose }: { word: HebrewWord; onClose: 
                 )}
 
                 {m.gloss && <p className="mt-1 text-base font-medium">{m.gloss}</p>}
+
+                {m.bdbDef && (
+                  <p className="mt-1 text-sm leading-snug text-neutral-600 dark:text-neutral-300">
+                    <span className="text-neutral-400">BDB:</span> {m.bdbDef}
+                  </p>
+                )}
 
                 {parsing && (
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
