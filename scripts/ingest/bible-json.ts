@@ -31,11 +31,12 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { OT_BOOKS } from './ot-books.ts';
 
 // Abreviações PT-BR (thiagobodruk) dos 27 livros do NT → nosso osis_code.
 // Inclui aliases tolerantes ("at"/"atos", "tt"/"tit") porque variantes do mesmo
 // formato divergem em alguns códigos.
-const PT_ABBREV_TO_OSIS: Record<string, string> = {
+const NT_ABBREV_TO_OSIS: Record<string, string> = {
   mt: 'Matt',
   mc: 'Mark',
   lc: 'Luke',
@@ -67,6 +68,15 @@ const PT_ABBREV_TO_OSIS: Record<string, string> = {
   ap: 'Rev',
 };
 
+// Mapa completo (NT + AT). As abreviações do AT vêm de ot-books.ts (campo `tb`).
+// ATENÇÃO: Jó é "jó" COM acento no thiagobodruk; "job" é alias tolerante. Não
+// normalizamos removendo acentos (isso colapsaria "jó" em "jo" = João, NT).
+const PT_ABBREV_TO_OSIS: Record<string, string> = {
+  ...NT_ABBREV_TO_OSIS,
+  ...Object.fromEntries(OT_BOOKS.map((b) => [b.tb, b.osis])),
+  job: 'Job',
+};
+
 interface OutVerse {
   ref: string;
   text: string;
@@ -82,7 +92,7 @@ function arg(name: string): string | undefined {
 }
 
 /** Converte UM livro (matriz capítulo→versículo) em versículos {ref, text}. */
-function convertBook(book: SourceBook): { osis: string; verses: OutVerse[] } | null {
+export function convertBook(book: SourceBook): { osis: string; verses: OutVerse[] } | null {
   const abbrev = (book.abbrev ?? '').trim().toLowerCase();
   const osis = PT_ABBREV_TO_OSIS[abbrev];
   if (!osis) return null; // livro do AT (fora do corpus) ou abreviação desconhecida
@@ -144,20 +154,20 @@ export function convertBibleJson(): void {
 
   console.log(`convertendo ${parsed.length} livro(s) do JSON thiagobodruk...`);
   const allVerses: OutVerse[] = [];
-  let ntBooks = 0;
+  let books = 0;
   for (const book of parsed as SourceBook[]) {
     const res = convertBook(book);
     if (!res) continue;
-    ntBooks++;
+    books++;
     allVerses.push(...res.verses);
     console.log(`  ${res.osis.padEnd(8)} ${res.verses.length} versículos`);
   }
   if (allVerses.length === 0) {
     throw new Error(
-      'nenhum versículo do NT extraído — verifique se o arquivo segue o formato {abbrev, chapters} com abreviações PT-BR.',
+      'nenhum versículo extraído — verifique se o arquivo segue o formato {abbrev, chapters} com abreviações PT-BR.',
     );
   }
-  console.log(`livros do NT convertidos: ${ntBooks}/27`);
+  console.log(`livros convertidos: ${books}/66`);
 
   const out = arg('out') ?? join('data', 'versions', `${code}.json`);
   const outDir = join(out, '..');

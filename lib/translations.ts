@@ -94,9 +94,28 @@ async function fetchParallelChapter(
   if (!book) return null;
 
   const allTranslations = await getTranslations();
+
+  // A coluna "Original" é UMA versão lógica que troca de língua por testamento:
+  // grego (grc) no NT, hebraico (hbo) no AT. Existem duas linhas is_original no
+  // catálogo (grc-sblgnt, hbo-wlc); aqui trocamos QUALQUER original pedido pelo
+  // da língua certa do livro atual. Assim navegar João → Gênesis mantém a coluna
+  // original presente e correta, sem o usuário reescolher a versão.
+  const originalCodes = new Set(
+    allTranslations.filter((t) => t.is_original).map((t) => t.code),
+  );
+  const originalForBook =
+    allTranslations.find(
+      (t) => t.is_original && t.language === (book.testament === 'OT' ? 'hbo' : 'grc'),
+    )?.code ?? null;
+  const resolvedCodes: string[] = [];
+  for (const c of codes) {
+    const next = originalCodes.has(c) ? originalForBook : c;
+    if (next && !resolvedCodes.includes(next)) resolvedCodes.push(next);
+  }
+
   // preserva a ordem pedida e descarta códigos desconhecidos
   const byCode = new Map(allTranslations.map((t) => [t.code, t]));
-  const selected = codes
+  const selected = resolvedCodes
     .map((c) => byCode.get(c))
     .filter((t): t is Translation => Boolean(t));
 

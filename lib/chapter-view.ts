@@ -49,11 +49,13 @@ export async function getChapterView(
   const parallel = await getParallelChapter(osis, chapter, codes);
   if (!parallel) return null;
 
-  const originalCode = parallel.translations.find((t) => t.is_original)?.code ?? null;
+  const original = parallel.translations.find((t) => t.is_original) ?? null;
 
-  // Tokens gregos (interlinear) só são necessários quando a coluna original está
-  // selecionada — senão poupamos o fetch do corpus tokenizado.
-  const greek = originalCode ? await getChapter(osis, chapter) : null;
+  // Tokens gregos (interlinear) só existem para o NT e só importam quando a coluna
+  // original está em grego. No AT a coluna original é hebraica (texto corrido, sem
+  // tokens no MVP), então pulamos o fetch do corpus tokenizado — que de todo modo
+  // não tem dados de AT.
+  const greek = original?.language === 'grc' ? await getChapter(osis, chapter) : null;
   const tokensByVerse = new Map<number, Token[]>();
   if (greek) {
     for (const v of greek.verses) tokensByVerse.set(v.verse, v.tokens);
@@ -62,7 +64,7 @@ export async function getChapterView(
   const rows: ChapterViewRow[] = parallel.rows.map((r) => ({
     verse: r.verse,
     ref: r.ref,
-    tokens: originalCode ? tokensByVerse.get(r.verse) ?? null : null,
+    tokens: greek ? tokensByVerse.get(r.verse) ?? null : null,
     texts: r.texts,
   }));
 

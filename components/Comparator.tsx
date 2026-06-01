@@ -130,6 +130,46 @@ function NavSheet({
   );
 }
 
+// Linha de versão no seletor: rótulo, sublinha e estado de marcação.
+function VersionRow({
+  on,
+  title,
+  subtitle,
+  onClick,
+}: {
+  on: boolean;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition ${
+        on
+          ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20'
+          : 'border-neutral-200 hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700'
+      }`}
+    >
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-sm font-medium">{title}</span>
+        <span className="truncate text-xs text-neutral-400">{subtitle}</span>
+      </span>
+      <span
+        aria-hidden
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
+          on
+            ? 'border-amber-500 bg-amber-500 text-white'
+            : 'border-neutral-300 text-transparent dark:border-neutral-600'
+        }`}
+      >
+        ✓
+      </span>
+    </button>
+  );
+}
+
 // Sheet de seleção de versões. Pelo menos uma versão deve permanecer ativa.
 function VersionSheet({
   all,
@@ -148,7 +188,35 @@ function VersionSheet({
   useEscapeToClose(onClose);
   const selectedSet = new Set(selected);
 
-  const toggle = (code: string) => {
+  // As duas linhas is_original (grego e hebraico) são UMA opção lógica no
+  // seletor — "Texto Original". O servidor já troca grego↔hebraico conforme o
+  // testamento do livro, então aqui basta um código representante (o de menor
+  // sort_order) ao ligar; ao desligar, removemos qualquer original.
+  const originals = all.filter((t) => t.is_original);
+  const others = all.filter((t) => !t.is_original);
+  const originalCodeSet = new Set(originals.map((t) => t.code));
+  const repOriginalCode = originals[0]?.code ?? null;
+  const anyOriginalOn = selected.some((c) => originalCodeSet.has(c));
+
+  // preserva a ordem do catálogo (sort_order) ao reconstruir os códigos
+  const orderByCatalog = (codes: string[]) => {
+    const set = new Set(codes);
+    return all.filter((t) => set.has(t.code)).map((t) => t.code);
+  };
+
+  const push = (codes: string[]) => router.push(compareHref(osis, chapter, orderByCatalog(codes)));
+
+  const toggleOriginal = () => {
+    if (anyOriginalOn) {
+      const remaining = selected.filter((c) => !originalCodeSet.has(c));
+      if (remaining.length === 0) return; // mantém ao menos uma versão
+      push(remaining);
+    } else if (repOriginalCode) {
+      push([...selected, repOriginalCode]);
+    }
+  };
+
+  const toggleOther = (code: string) => {
     const next = new Set(selectedSet);
     if (next.has(code)) {
       if (next.size === 1) return; // mantém ao menos uma versão
@@ -156,9 +224,7 @@ function VersionSheet({
     } else {
       next.add(code);
     }
-    // preserva a ordem do catálogo (sort_order) ao reconstruir os códigos
-    const codes = all.filter((t) => next.has(t.code)).map((t) => t.code);
-    router.push(compareHref(osis, chapter, codes));
+    push([...next]);
   };
 
   return (
@@ -168,38 +234,23 @@ function VersionSheet({
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
         <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Versões</h2>
         <div className="mt-3 flex flex-col gap-2">
-          {all.map((t) => {
-            const on = selectedSet.has(t.code);
-            return (
-              <button
-                key={t.code}
-                type="button"
-                onClick={() => toggle(t.code)}
-                className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition ${
-                  on
-                    ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20'
-                    : 'border-neutral-200 hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700'
-                }`}
-              >
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm font-medium">{t.name}</span>
-                  <span className="truncate text-xs text-neutral-400">
-                    {t.language.toUpperCase()} · {t.license}
-                  </span>
-                </span>
-                <span
-                  aria-hidden
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
-                    on
-                      ? 'border-amber-500 bg-amber-500 text-white'
-                      : 'border-neutral-300 text-transparent dark:border-neutral-600'
-                  }`}
-                >
-                  ✓
-                </span>
-              </button>
-            );
-          })}
+          {originals.length > 0 && (
+            <VersionRow
+              on={anyOriginalOn}
+              title="Texto Original"
+              subtitle="Grego (NT) · Hebraico (AT)"
+              onClick={toggleOriginal}
+            />
+          )}
+          {others.map((t) => (
+            <VersionRow
+              key={t.code}
+              on={selectedSet.has(t.code)}
+              title={t.name}
+              subtitle={`${t.language.toUpperCase()} · ${t.license}`}
+              onClick={() => toggleOther(t.code)}
+            />
+          ))}
         </div>
         {all.length <= 1 && (
           <p className="mt-4 text-xs leading-relaxed text-neutral-400">
@@ -236,7 +287,12 @@ export function Comparator({
   }, []);
 
   const codes = translations.map((t) => t.code);
-  const originalCode = translations.find((t) => t.is_original)?.code ?? null;
+  const original = translations.find((t) => t.is_original) ?? null;
+  const originalCode = original?.code ?? null;
+  // Língua da coluna original define o tratamento tipográfico: grego (LTR,
+  // font-greek) ou hebraico (RTL, font-hebrew). É uma só coluna lógica que muda
+  // conforme o testamento do livro.
+  const originalIsHebrew = original?.language === 'hbo';
   const idx = chapters.indexOf(number);
   const prev = idx > 0 ? chapters[idx - 1] : null;
   const next = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null;
@@ -355,7 +411,18 @@ export function Comparator({
                             onSelect={(token) => setSelected({ verse: row.verse, token })}
                           />
                         ) : text ? (
-                          <span className={isOriginal ? 'font-greek' : ''}>{text}</span>
+                          <span
+                            dir={isOriginal && originalIsHebrew ? 'rtl' : undefined}
+                            className={
+                              isOriginal
+                                ? originalIsHebrew
+                                  ? 'font-hebrew text-[17px] leading-loose'
+                                  : 'font-greek'
+                                : ''
+                            }
+                          >
+                            {text}
+                          </span>
                         ) : (
                           <span className="text-neutral-300 dark:text-neutral-600">—</span>
                         )}

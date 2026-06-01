@@ -6,6 +6,15 @@ const config: Config = {
     extend: {
       fontFamily: {
         greek: ['var(--font-greek)', 'Gentium Plus', 'Georgia', 'serif'],
+        hebrew: [
+          'var(--font-hebrew)',
+          'SBL Hebrew',
+          'Ezra SIL',
+          'Taamey Frank CLM',
+          'Frank Ruhl Libre',
+          'David',
+          'serif',
+        ],
       },
     },
   },

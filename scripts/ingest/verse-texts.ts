@@ -191,8 +191,13 @@ interface GetbibleVerse {
   text: string;
 }
 
-// Lista canônica de capítulos (book_id, osis, chapter) derivada do corpus já
-// carregado — define quais (livro, capítulo) buscar na fonte.
+// Línguas originais que definem o cânone a buscar: grego (NT) + hebraico (AT).
+// A lista canônica deriva de verse_texts destes códigos — não da tabela `verses`
+// (só NT) — para que as versões livres (getbible) também cubram o AT.
+const ORIGINAL_CODES = [GRC_CODE, 'hbo-wlc'];
+
+// Lista canônica de capítulos (book_id, osis, chapter) derivada dos textos
+// originais já carregados — define quais (livro, capítulo) buscar na fonte.
 async function readChapterList(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client: any,
@@ -205,21 +210,32 @@ async function readChapterList(
   );
   const osisById = new Map(books.map((b) => [b.id, b.osis_code]));
 
-  const verses = await readAll<{ book_id: number; chapter: number }>(
-    client,
-    'verses',
-    'book_id,chapter',
-    'book_id',
-  );
+  // distinct (book_id, chapter) sobre os textos originais (grc NT + hbo AT).
+  // Paginado com ordem determinística por (translation_code, ref) — combo único
+  // de verse_texts — para que o range não embaralhe linhas entre páginas.
   const seen = new Set<string>();
   const out: Array<{ bookId: number; osis: string; chapter: number }> = [];
-  for (const v of verses) {
-    const key = `${v.book_id}:${v.chapter}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const osis = osisById.get(v.book_id);
-    if (!osis) continue; // versículo sem livro correspondente — ignora
-    out.push({ bookId: v.book_id, osis, chapter: v.chapter });
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await client
+      .from('verse_texts')
+      .select('book_id,chapter')
+      .in('translation_code', ORIGINAL_CODES)
+      .order('translation_code')
+      .order('ref')
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`ler verse_texts (originais): ${error.message}`);
+    const page = (data ?? []) as Array<{ book_id: number | null; chapter: number }>;
+    for (const v of page) {
+      if (v.book_id == null) continue;
+      const key = `${v.book_id}:${v.chapter}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const osis = osisById.get(v.book_id);
+      if (!osis) continue; // versículo sem livro correspondente — ignora
+      out.push({ bookId: v.book_id, osis, chapter: v.chapter });
+    }
+    if (page.length < PAGE) break;
   }
   return out.sort((a, b) => a.bookId - b.bookId || a.chapter - b.chapter);
 }
@@ -230,6 +246,11 @@ async function fetchGetbibleChapter(
   chapter: number,
 ): Promise<GetbibleVerse[]> {
   const res = await fetch(`https://api.getbible.net/v2/${getbibleKey}/${bookId}/${chapter}.json`);
+  // 404 = capítulo inexistente NESTA versão (diferença de versificação: o cânone
+  // é guiado pelo original hebraico/grego, que numera alguns livros com mais
+  // capítulos que as traduções cristãs — ex.: Joel tem 4 capítulos no WLC e 3 na
+  // maioria das traduções). Tratamos como "sem versículos" em vez de abortar.
+  if (res.status === 404) return [];
   if (!res.ok) throw new Error(`getbible ${getbibleKey} ${bookId}/${chapter}: HTTP ${res.status}`);
   const data = (await res.json()) as { verses?: GetbibleVerse[] };
   return data.verses ?? [];

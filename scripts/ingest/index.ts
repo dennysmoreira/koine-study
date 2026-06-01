@@ -37,6 +37,8 @@ import { parseTflsj } from './stepbible-lsj.ts';
 import { backfillGreek, ingestFreeVersions, ingestVersionFromFile } from './verse-texts.ts';
 import { convertUsfm } from './usfm.ts';
 import { convertBibleJson } from './bible-json.ts';
+import { downloadHebrew, ingestHebrew } from './hebrew-wlc.ts';
+import { ingestThiagobodruk } from './thiagobodruk.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SOURCES = join(ROOT, 'data', 'sources');
@@ -408,6 +410,9 @@ async function main(): Promise<void> {
   if (step === 'ingest-version-file') return void (await ingestVersionFromFile(arg('file')));
   if (step === 'convert-usfm') return convertUsfm();
   if (step === 'convert-bible-json') return convertBibleJson();
+  if (step === 'download-hebrew') return void (await downloadHebrew());
+  if (step === 'ingest-hebrew') return void (await ingestHebrew());
+  if (step === 'ingest-thiagobodruk') return void (await ingestThiagobodruk(arg('code')));
   // padrão: download + build
   await download();
   build();

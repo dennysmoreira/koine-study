@@ -31,6 +31,9 @@
     "ingest:version-file": "tsx scripts/ingest/index.ts --step=ingest-version-file",
     "ingest:convert-usfm": "tsx scripts/ingest/index.ts --step=convert-usfm",
     "ingest:convert-bible-json": "tsx scripts/ingest/index.ts --step=convert-bible-json",
+    "ingest:download-hebrew": "tsx scripts/ingest/index.ts --step=download-hebrew",
+    "ingest:hebrew": "tsx scripts/ingest/index.ts --step=ingest-hebrew",
+    "ingest:thiagobodruk": "tsx scripts/ingest/index.ts --step=ingest-thiagobodruk",
     "morph:test": "tsx scripts/ingest/morph-decoder.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json"
