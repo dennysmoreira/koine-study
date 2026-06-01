@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { isStudyMode, getStudyMode } from '@/lib/study-modes';
 import { extractFileText } from '@/lib/extract-text';
+import { annotationLabel } from '@/lib/annotations';
 
 export interface SaveStudyInput {
   osis: string;
@@ -153,13 +154,14 @@ export async function createStudy(input: CreateStudyInput = {}): Promise<SaveStu
 
 // Confirma que o estudo pertence ao usuário logado. As tabelas-filha têm RLS por
 // user_id, mas isso não impede anexar a um study_id alheio; este guard fecha o furo.
+// Não precisa do userId: a leitura de saved_studies já é filtrada pela RLS
+// own_studies — se veio linha, é do usuário.
 async function assertOwnsStudy(
   supabase: ReturnType<typeof createClient>,
-  userId: string,
   studyId: number,
 ): Promise<boolean> {
   const { data } = await supabase.from('saved_studies').select('id').eq('id', studyId).maybeSingle();
-  return !!data; // RLS já filtra por dono; se veio linha, é do usuário
+  return !!data;
 }
 
 /** Adiciona uma referência bíblica (versículo da base) ao estudo. */
@@ -175,7 +177,7 @@ export async function addStudyReference(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
-  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+  if (!(await assertOwnsStudy(supabase, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
 
   const { error } = await supabase.from('study_references').upsert(
     {
@@ -240,7 +242,7 @@ export async function addReferencesToStudy(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
-  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+  if (!(await assertOwnsStudy(supabase, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
 
   const rows = references.map((r) => ({
     study_id: studyId,
@@ -297,7 +299,7 @@ export async function addTextSource(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
-  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+  if (!(await assertOwnsStudy(supabase, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
 
   const { error } = await supabase.from('study_sources').insert({
     study_id: studyId,
@@ -307,6 +309,64 @@ export async function addTextSource(
     content: cleanContent,
   });
   if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/studies/${studyId}`);
+  return { ok: true };
+}
+
+/**
+ * Vincula uma anotação existente ao estudo como fonte (kind='annotation'). Vínculo
+ * AO VIVO: o corpo NÃO é copiado — guardamos só a FK annotation_id e a leitura
+ * (getStudyWorkspace) resolve o texto atual, então editar a anotação propaga ao
+ * estudo e ao contexto da IA. O índice único parcial (study_id, annotation_id)
+ * impede vincular a mesma anotação duas vezes.
+ */
+export async function addAnnotationSource(
+  studyId: number,
+  annotationId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(studyId) || !Number.isInteger(annotationId)) {
+    return { ok: false, error: 'Id inválido.' };
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+  if (!(await assertOwnsStudy(supabase, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+
+  // RLS (own_annotations) garante que só o dono lê a própria anotação.
+  const { data: ann } = await supabase
+    .from('annotations')
+    .select('id, book_name, chapter, verse_start, verse_end')
+    .eq('id', annotationId)
+    .maybeSingle();
+  const row = ann as
+    | { id: number; book_name: string; chapter: number; verse_start: number; verse_end: number }
+    | null;
+  if (!row) return { ok: false, error: 'Anotação não encontrada.' };
+
+  const title = `Anotação — ${annotationLabel({
+    bookName: row.book_name,
+    chapter: row.chapter,
+    verseStart: row.verse_start,
+    verseEnd: row.verse_end,
+  })}`;
+
+  const { error } = await supabase.from('study_sources').insert({
+    study_id: studyId,
+    user_id: user.id,
+    kind: 'annotation',
+    title: title.slice(0, 200),
+    annotation_id: annotationId,
+  });
+  if (error) {
+    // 23505 = unique_violation no índice (study_id, annotation_id): já vinculada.
+    if (error.code === '23505') return { ok: false, error: 'Esta anotação já está vinculada ao estudo.' };
+    console.error('addAnnotationSource falhou', error);
+    return { ok: false, error: 'Falha ao vincular a anotação.' };
+  }
 
   revalidatePath(`/studies/${studyId}`);
   return { ok: true };
@@ -335,7 +395,7 @@ export async function addFileSource(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
-  if (!(await assertOwnsStudy(supabase, user.id, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
+  if (!(await assertOwnsStudy(supabase, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
 
   // Sanitiza o nome e prefixa com timestamp para evitar colisão/path traversal.
   const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-80) || 'arquivo';

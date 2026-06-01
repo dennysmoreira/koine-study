@@ -10,16 +10,24 @@
  */
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { addTextSource, addFileSource, removeStudySource } from '@/app/study/actions';
+import { addTextSource, addFileSource, addAnnotationSource, removeStudySource } from '@/app/study/actions';
+import { listMyAnnotations, type AnnotationOption } from '@/app/annotations/actions';
 import type { StudySource } from '@/lib/saved-studies';
+
+function sourceIcon(kind: StudySource['kind']): string {
+  if (kind === 'file') return '📎';
+  if (kind === 'annotation') return '📝';
+  return '🗒️';
+}
 
 export function StudySourcesPanel({ studyId, sources }: { studyId: number; sources: StudySource[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [mode, setMode] = useState<'none' | 'text' | 'file'>('none');
+  const [mode, setMode] = useState<'none' | 'text' | 'file' | 'annotation'>('none');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [annotations, setAnnotations] = useState<AnnotationOption[] | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function reset() {
@@ -27,7 +35,28 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
     setTitle('');
     setContent('');
     setError(null);
+    setAnnotations(null);
     if (fileRef.current) fileRef.current.value = '';
+  }
+
+  function openAnnotationPicker() {
+    setError(null);
+    setMode('annotation');
+    setAnnotations(null);
+    startTransition(async () => {
+      setAnnotations(await listMyAnnotations());
+    });
+  }
+
+  function linkAnnotation(annotationId: number) {
+    setError(null);
+    startTransition(async () => {
+      const res = await addAnnotationSource(studyId, annotationId);
+      if (res.ok) {
+        reset();
+        router.refresh();
+      } else setError(res.error ?? 'Falha ao vincular a anotação.');
+    });
   }
 
   function submitText() {
@@ -86,7 +115,7 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
               key={s.id}
               className="flex items-center gap-2 rounded-md bg-neutral-100 px-2 py-1 text-xs dark:bg-neutral-800/60"
             >
-              <span aria-hidden>{s.kind === 'file' ? '📎' : '📝'}</span>
+              <span aria-hidden>{sourceIcon(s.kind)}</span>
               <span className="min-w-0 flex-1 truncate" title={s.title}>
                 {s.title}
               </span>
@@ -119,6 +148,44 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
             className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
             + Arquivo
+          </button>
+          <button
+            type="button"
+            onClick={openAnnotationPicker}
+            className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            + Vincular anotação
+          </button>
+        </div>
+      )}
+
+      {mode === 'annotation' && (
+        <div className="mt-2 space-y-2">
+          {annotations === null ? (
+            <p className="py-2 text-center text-xs text-neutral-400">Carregando…</p>
+          ) : annotations.length === 0 ? (
+            <p className="py-2 text-center text-xs text-neutral-400">
+              Você ainda não tem anotações. Crie uma no comparador.
+            </p>
+          ) : (
+            <ul className="max-h-48 space-y-1 overflow-y-auto">
+              {annotations.map((a) => (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => linkAnnotation(a.id)}
+                    disabled={pending}
+                    className="w-full rounded-md border border-neutral-200 px-2 py-1.5 text-left transition hover:border-amber-300 hover:bg-amber-50 disabled:opacity-60 dark:border-neutral-800 dark:hover:border-amber-700 dark:hover:bg-amber-900/20"
+                  >
+                    <span className="block text-xs font-medium text-amber-700 dark:text-amber-300">{a.label}</span>
+                    <span className="block truncate text-[11px] text-neutral-500">{a.preview}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button type="button" onClick={reset} className="rounded-md px-3 py-1 text-xs text-neutral-500">
+            Cancelar
           </button>
         </div>
       )}

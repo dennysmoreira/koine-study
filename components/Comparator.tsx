@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Book, Token } from '@/lib/corpus';
@@ -13,7 +13,9 @@ import { HebrewVerse } from './hebrew/HebrewVerse';
 import { HebrewWordSheet } from './hebrew/HebrewWordSheet';
 import { StudyModal } from './StudyModal';
 import { VerseSelectionBar } from './VerseSelectionBar';
+import { AnnotationSheet } from './AnnotationSheet';
 import type { ReferenceInput } from '@/app/study/actions';
+import type { Annotation } from '@/lib/annotations';
 import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
 
 const TESTAMENT_LABELS: Record<string, string> = {
@@ -364,10 +366,12 @@ export function Comparator({
   chapter,
   books,
   allTranslations,
+  annotations,
 }: {
   chapter: ChapterView;
   books: Book[];
   allTranslations: Translation[];
+  annotations: Annotation[];
 }) {
   const { book, number, chapters, translations, rows } = chapter;
   const [navOpen, setNavOpen] = useState(false);
@@ -383,7 +387,24 @@ export function Comparator({
   const [selectedHebrew, setSelectedHebrew] = useState<{ verse: number; word: HebrewWord } | null>(null);
   const [highlight, setHighlight] = useState<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
+  // Versículo cujas anotações estão abertas na folha de leitura (marcador 📝).
+  const [annotationVerse, setAnnotationVerse] = useState<number | null>(null);
   const searchParams = useSearchParams();
+
+  // Índice versículo → anotações que o cobrem (faixa verse_start..verse_end), para
+  // marcar no comparador e abrir a folha de leitura ao tocar no marcador. Memoizado
+  // para não reconstruir o Map a cada render (só quando as anotações mudam).
+  const annotationsByVerse = useMemo(() => {
+    const map = new Map<number, Annotation[]>();
+    for (const a of annotations) {
+      for (let v = a.verseStart; v <= a.verseEnd; v++) {
+        const list = map.get(v) ?? [];
+        list.push(a);
+        map.set(v, list);
+      }
+    }
+    return map;
+  }, [annotations]);
 
   // Limpa o timer do realce ao desmontar, evitando setState após unmount.
   useEffect(() => () => {
@@ -437,27 +458,29 @@ export function Comparator({
     });
   };
 
-  // Deep-link de versículo: ao chegar de outro capítulo via filtro (?goto=N), rola
-  // até o versículo e o realça. A rolagem usa retry curto porque o capítulo
-  // recém-montado ainda assenta o layout (um rAF único viraria no-op). A limpeza
-  // do `goto` da URL é feita com history.replaceState — NÃO com router.replace —
-  // pois um replace dispara re-render do Next que cancela a rolagem em andamento.
-  // O guard `gotoDone` só é marcado DENTRO do tick bem-sucedido: marcá-lo antes
-  // quebra no StrictMode (mount→cleanup→mount cancela o 1º timer e o 2º mount
-  // abortaria), deixando o scroll sem rodar.
-  const gotoDone = useRef(false);
+  // Deep-link de versículo: ao chegar via filtro (?goto=N), rola até o versículo e
+  // o realça. A rolagem usa retry curto porque o capítulo recém-montado ainda
+  // assenta o layout (um rAF único viraria no-op). A limpeza do `goto` da URL é
+  // feita com history.replaceState — NÃO com router.replace — pois um replace
+  // dispara re-render do Next que cancela a rolagem em andamento.
+  // `lastGoto` guarda o ÚLTIMO versículo já tratado (não um booleano): assim um
+  // novo ?goto no MESMO capítulo (ex.: clicar outra referência relacionada) volta
+  // a rolar, mas o replaceState que limpa a URL não reabre o efeito. Só é marcado
+  // DENTRO do tick bem-sucedido: marcá-lo antes quebra no StrictMode
+  // (mount→cleanup→mount cancela o 1º timer e o 2º mount abortaria).
+  const lastGoto = useRef<number | null>(null);
   useEffect(() => {
     const raw = searchParams.get('goto');
-    if (!raw || gotoDone.current) return;
+    if (!raw) return;
     const verse = Number(raw);
-    if (!Number.isInteger(verse)) return;
+    if (!Number.isInteger(verse) || lastGoto.current === verse) return;
 
     let tries = 0;
     let timer = 0;
     const tick = () => {
       const el = document.getElementById(`v${verse}`);
       if (el) {
-        gotoDone.current = true;
+        lastGoto.current = verse;
         el.scrollIntoView({ block: 'start' });
         flashHighlight(verse);
         const url = new URL(window.location.href);
@@ -572,16 +595,33 @@ export function Comparator({
             const activeHebrewPosition =
               selectedHebrew?.verse === row.verse ? selectedHebrew.word.position : null;
             const isSelected = selectedVerses.has(row.verse);
+            const verseAnnotations = annotationsByVerse.get(row.verse);
             return (
               <div
                 key={row.verse}
                 id={`v${row.verse}`}
-                className={`scroll-mt-20 rounded-md border-b border-neutral-100 py-3 transition-colors duration-500 last:border-0 dark:border-neutral-800/60 ${
+                className={`relative scroll-mt-20 rounded-md border-b border-neutral-100 py-3 transition-colors duration-500 last:border-0 dark:border-neutral-800/60 ${
                   selectMode ? 'flex gap-3' : ''
                 } ${highlight === row.verse ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${
                   isSelected ? 'bg-amber-50/70 dark:bg-amber-900/10' : ''
                 }`}
               >
+                {verseAnnotations && verseAnnotations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAnnotationVerse(row.verse)}
+                    title={`Ver anotação${verseAnnotations.length > 1 ? 's' : ''} do versículo ${row.verse}`}
+                    aria-label={`Ver anotação${verseAnnotations.length > 1 ? 's' : ''} do versículo ${row.verse}`}
+                    className="absolute right-1 top-2 z-10 rounded-md px-1 text-sm leading-none transition hover:scale-110"
+                  >
+                    <span aria-hidden>📝</span>
+                    {verseAnnotations.length > 1 && (
+                      <span className="ml-0.5 align-super text-[10px] font-semibold text-amber-600">
+                        {verseAnnotations.length}
+                      </span>
+                    )}
+                  </button>
+                )}
                 {selectMode && (
                   <button
                     type="button"
@@ -696,6 +736,14 @@ export function Comparator({
 
       {selectedHebrew && (
         <HebrewWordSheet word={selectedHebrew.word} onClose={() => setSelectedHebrew(null)} />
+      )}
+
+      {annotationVerse != null && (
+        <AnnotationSheet
+          verse={annotationVerse}
+          annotations={annotationsByVerse.get(annotationVerse) ?? []}
+          onClose={() => setAnnotationVerse(null)}
+        />
       )}
 
       {selectMode && selectedReferences.length > 0 && (

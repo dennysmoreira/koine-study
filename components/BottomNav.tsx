@@ -27,6 +27,7 @@ const TABS: NavItem[] = [
 
 // Demais seções, acessíveis pela folha "Mais".
 const MORE: NavItem[] = [
+  { href: '/annotations', icon: '📝', label: 'Anotações' },
   { href: '/alphabet', icon: '🔤', label: 'Alfabeto' },
   { href: '/lessons', icon: '📖', label: 'Gramática' },
   { href: '/trail', icon: '📊', label: 'Frequência' },

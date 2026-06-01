@@ -2,7 +2,9 @@
 
 /**
  * Barra de ação que aparece quando o usuário seleciona um ou mais versículos no
- * comparador. Dois fluxos:
+ * comparador. Três fluxos:
+ *   • "Anotar" → cria uma anotação pessoal da passagem (sem IA); o versículo passa
+ *     a exibir o marcador 📝 no comparador;
  *   • "Adicionar a um estudo" → anexa os versículos a um estudo existente (sheet
  *     com a lista) ou cria um novo já com eles citados;
  *   • "Explicar com IA" → cria um estudo com os versículos citados e abre o chat
@@ -19,6 +21,10 @@ import {
   type ReferenceInput,
   type StudyOption,
 } from '@/app/study/actions';
+import { createAnnotation } from '@/app/annotations/actions';
+import type { CrossRef } from '@/lib/annotations';
+import { CrossRefPicker } from './CrossRefPicker';
+import { CrossRefChips } from './CrossRefChips';
 
 export function VerseSelectionBar({
   references,
@@ -36,9 +42,54 @@ export function VerseSelectionBar({
   const [picker, setPicker] = useState(false);
   const [studies, setStudies] = useState<StudyOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [note, setNote] = useState('');
+  const [refs, setRefs] = useState<CrossRef[]>([]);
+  const [pickingRef, setPickingRef] = useState(false);
 
   const count = references.length;
   const defaultTitle = `${bookName} ${chapter}`;
+
+  // Faixa da seleção: 1º e último versículos (a anotação cobre min..max). A lista
+  // já vem ordenada por versículo do comparador.
+  // Invariante: a barra só é renderizada com 1+ versículos selecionados (ver
+  // Comparator) e a seleção é sempre dentro de UM capítulo, então min..max é seguro.
+  const verses = references.map((r) => r.verse);
+  const verseStart = Math.min(...verses);
+  const verseEnd = Math.max(...verses);
+  const rangeLabel = verseStart === verseEnd ? `${verseStart}` : `${verseStart}-${verseEnd}`;
+
+  function saveAnnotation() {
+    const body = note.trim();
+    if (!body) {
+      setError('Escreva o conteúdo da anotação.');
+      return;
+    }
+    const first = references[0];
+    if (!first) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await createAnnotation({
+        osis: first.osis,
+        bookName: first.bookName,
+        chapter: first.chapter,
+        verseStart,
+        verseEnd,
+        body,
+        crossRefs: refs,
+      });
+      if (res.ok) {
+        setNote('');
+        setRefs([]);
+        setPickingRef(false);
+        setComposing(false);
+        onClear();
+        router.refresh();
+      } else {
+        setError(res.error ?? 'Falha ao salvar a anotação.');
+      }
+    });
+  }
 
   function openPicker() {
     setError(null);
@@ -77,13 +128,25 @@ export function VerseSelectionBar({
           <span className="text-sm font-medium">
             {count} versículo{count > 1 ? 's' : ''} selecionado{count > 1 ? 's' : ''}
           </span>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClear}
               className="rounded-lg px-3 py-2 text-sm text-neutral-500 transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
             >
               Limpar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setComposing((c) => !c);
+              }}
+              disabled={pending}
+              aria-pressed={composing}
+              className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            >
+              ✍️ Anotar
             </button>
             <button
               type="button"
@@ -103,6 +166,68 @@ export function VerseSelectionBar({
             </button>
           </div>
         </div>
+        {composing && (
+          <div className="mx-auto mt-3 w-full max-w-5xl">
+            <label className="mb-1 block text-xs font-medium text-neutral-500">
+              Sua anotação · {bookName} {chapter}:{rangeLabel}
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Escreva sua observação sobre esta passagem…"
+              rows={3}
+              autoFocus
+              className="w-full resize-y rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-500 dark:border-neutral-700 dark:bg-neutral-900"
+            />
+
+            <div className="mt-2 space-y-2">
+              {refs.length > 0 && (
+                <CrossRefChips refs={refs} onRemove={(i) => setRefs((prev) => prev.filter((_, idx) => idx !== i))} />
+              )}
+              {pickingRef ? (
+                <CrossRefPicker
+                  onAdd={(r) => {
+                    setRefs((prev) => [...prev, r]);
+                    setPickingRef(false);
+                  }}
+                  onCancel={() => setPickingRef(false)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPickingRef(true)}
+                  className="rounded-lg border border-dashed border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  + Referência relacionada
+                </button>
+              )}
+            </div>
+
+            <div className="mt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setComposing(false);
+                  setNote('');
+                  setRefs([]);
+                  setPickingRef(false);
+                  setError(null);
+                }}
+                className="rounded-lg px-3 py-1.5 text-sm text-neutral-500 transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveAnnotation}
+                disabled={pending}
+                className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+              >
+                {pending ? 'Salvando…' : 'Salvar anotação'}
+              </button>
+            </div>
+          </div>
+        )}
         {error && <p className="mx-auto mt-2 max-w-5xl text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
 

@@ -1,8 +1,21 @@
 'use server';
 
 import { supabase } from '@/lib/supabase';
-import { getLexiconEntries, getBookByOsis, type LexiconEntry } from '@/lib/corpus';
+import { getLexiconEntries, getBookByOsis, getBooks, type LexiconEntry } from '@/lib/corpus';
 import { getTranslations } from '@/lib/translations';
+
+export interface BookOption {
+  osis: string;
+  name: string;
+}
+
+// Lista de livros (osis + nome em PT) para o seletor de referências relacionadas
+// das anotações. getBooks é cacheada (Data Cache, tag 'corpus'), então repetições
+// não batem no banco.
+export async function listBooks(): Promise<BookOption[]> {
+  const books = await getBooks();
+  return books.map((b) => ({ osis: b.osis_code, name: b.name_pt }));
+}
 
 // Server Action chamada pelo comparador unificado (client component) ao abrir o
 // painel de um token grego. As entradas LSJ são grandes (mediana ~200, máx ~16 KB

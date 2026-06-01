@@ -8,6 +8,7 @@ import 'server-only';
 import { createClient } from './supabase/server';
 import { isStudyMode, type StudyMode } from './study-modes';
 import { extractFileText } from './extract-text';
+import { parseCrossRefs } from './annotations';
 
 export interface SavedStudy {
   id: number;
@@ -63,12 +64,14 @@ export interface StudyMessage {
 
 export interface StudySource {
   id: number;
-  kind: 'text' | 'file';
+  kind: 'text' | 'file' | 'annotation';
   title: string;
   content: string | null;
   storagePath: string | null;
   mimeType: string | null;
   byteSize: number | null;
+  /** id da anotação vinculada (kind='annotation'); o conteúdo é resolvido ao vivo. */
+  annotationId: number | null;
   createdAt: string;
 }
 
@@ -92,7 +95,11 @@ export interface StudyWorkspace {
 interface StudyMessageRow { id: number; role: string; content: string; created_at: string }
 interface StudySourceRow {
   id: number; kind: string; title: string; content: string | null;
-  storage_path: string | null; mime_type: string | null; byte_size: number | null; created_at: string;
+  storage_path: string | null; mime_type: string | null; byte_size: number | null;
+  annotation_id: number | null;
+  // Embed (to-one) da anotação vinculada quando kind='annotation'.
+  annotation: { body: string; cross_refs: unknown } | null;
+  created_at: string;
 }
 interface StudyReferenceRow {
   id: number; ref: string; osis: string; book_name: string;
@@ -102,10 +109,24 @@ interface StudyReferenceRow {
 function toMessage(r: StudyMessageRow): StudyMessage {
   return { id: r.id, role: r.role === 'assistant' ? 'assistant' : 'user', content: r.content, createdAt: r.created_at };
 }
+function annotationContent(annotation: StudySourceRow['annotation']): string | null {
+  const body = annotation?.body ?? null;
+  if (!body) return null;
+  const refs = parseCrossRefs(annotation?.cross_refs);
+  if (refs.length === 0) return body;
+  return `${body}\n\nReferências relacionadas: ${refs.map((x) => x.ref).join('; ')}`;
+}
 function toSource(r: StudySourceRow): StudySource {
+  const kind = r.kind === 'file' ? 'file' : r.kind === 'annotation' ? 'annotation' : 'text';
+  // Vínculo ao vivo: para anotação, o conteúdo vem da anotação atual (não da
+  // coluna content, que fica nula). Assim editar a anotação reflete no estudo e
+  // no contexto da IA (buildChatContext injeta fontes com content preenchido).
+  // As referências relacionadas entram como uma linha extra para a IA enxergá-las.
+  const content = kind === 'annotation' ? annotationContent(r.annotation) : r.content;
   return {
-    id: r.id, kind: r.kind === 'file' ? 'file' : 'text', title: r.title, content: r.content,
-    storagePath: r.storage_path, mimeType: r.mime_type, byteSize: r.byte_size, createdAt: r.created_at,
+    id: r.id, kind, title: r.title, content,
+    storagePath: r.storage_path, mimeType: r.mime_type, byteSize: r.byte_size,
+    annotationId: r.annotation_id, createdAt: r.created_at,
   };
 }
 function toReference(r: StudyReferenceRow): StudyReference {
@@ -166,7 +187,7 @@ export async function getStudyWorkspace(id: number): Promise<StudyWorkspace | nu
       .order('created_at', { ascending: true }),
     supabase
       .from('study_sources')
-      .select('id, kind, title, content, storage_path, mime_type, byte_size, created_at')
+      .select('id, kind, title, content, storage_path, mime_type, byte_size, annotation_id, created_at, annotation:annotations(body, cross_refs)')
       .eq('study_id', id)
       .order('created_at', { ascending: true }),
     supabase
