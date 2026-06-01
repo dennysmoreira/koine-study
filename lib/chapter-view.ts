@@ -1,5 +1,6 @@
 import 'server-only';
 import { getChapter, type Book, type Token } from './corpus';
+import { getHebrewChapter, type HebrewWord } from './hebrew';
 import { getParallelChapter, type Translation } from './translations';
 
 // ── Vista unificada do capítulo ────────────────────────────────────────────
@@ -15,6 +16,11 @@ import { getParallelChapter, type Translation } from './translations';
 // tokens num versículo. Assim a tela única compara versões E mostra a definição
 // das palavras gregas. É um Aggregate: compõe duas leituras já cacheadas, então
 // não precisa de cache próprio.
+//
+// No AT a coluna original é hebraica: o texto plano vem de `verse_texts`
+// (`hbo-wlc`) e o interlinear (palavras clicáveis com morfemas/morfologia) de
+// `hebrew_words`. Mesmo padrão do grego — renderiza as PALAVRAS quando existem,
+// caindo para o texto plano por versículo.
 
 export interface ChapterViewRow {
   verse: number;
@@ -24,7 +30,10 @@ export interface ChapterViewRow {
   // (getChapter null); ou o versículo específico não foi tokenizado. Nesses casos
   // a coluna original cai para o texto plano (ou "—" se também ausente).
   tokens: Token[] | null;
-  // Texto plano por código de versão (inclui o grego plano como fallback).
+  // Palavras hebraicas do versículo (só para a coluna original no AT). null pelos
+  // mesmos motivos dos tokens; nesse caso a coluna cai para o texto plano hebraico.
+  hebrewWords: HebrewWord[] | null;
+  // Texto plano por código de versão (inclui o original plano como fallback).
   texts: Record<string, string | null>;
 }
 
@@ -51,20 +60,27 @@ export async function getChapterView(
 
   const original = parallel.translations.find((t) => t.is_original) ?? null;
 
-  // Tokens gregos (interlinear) só existem para o NT e só importam quando a coluna
-  // original está em grego. No AT a coluna original é hebraica (texto corrido, sem
-  // tokens no MVP), então pulamos o fetch do corpus tokenizado — que de todo modo
-  // não tem dados de AT.
+  // Interlinear só importa para a coluna original e depende da língua:
+  //   - grego (NT) → tokens de `tokens`;
+  //   - hebraico (AT) → palavras de `hebrew_words`.
+  // Buscamos apenas o lado relevante; o outro fica null.
   const greek = original?.language === 'grc' ? await getChapter(osis, chapter) : null;
   const tokensByVerse = new Map<number, Token[]>();
   if (greek) {
     for (const v of greek.verses) tokensByVerse.set(v.verse, v.tokens);
   }
 
+  const hebrew = original?.language === 'hbo' ? await getHebrewChapter(osis, chapter) : null;
+  const hebrewByVerse = hebrew ? new Map<number, HebrewWord[]>() : null;
+  if (hebrew && hebrewByVerse) {
+    for (const v of hebrew.verses) hebrewByVerse.set(v.verse, v.words);
+  }
+
   const rows: ChapterViewRow[] = parallel.rows.map((r) => ({
     verse: r.verse,
     ref: r.ref,
     tokens: greek ? tokensByVerse.get(r.verse) ?? null : null,
+    hebrewWords: hebrewByVerse ? hebrewByVerse.get(r.verse) ?? null : null,
     texts: r.texts,
   }));
 

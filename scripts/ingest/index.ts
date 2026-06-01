@@ -39,6 +39,8 @@ import { convertUsfm } from './usfm.ts';
 import { convertBibleJson } from './bible-json.ts';
 import { downloadHebrew, ingestHebrew } from './hebrew-wlc.ts';
 import { ingestThiagobodruk } from './thiagobodruk.ts';
+import { ingestHebrewStrongs } from './hebrew-strongs.ts';
+import { ingestHebrewInterlinear } from './hebrew-interlinear.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SOURCES = join(ROOT, 'data', 'sources');
@@ -413,6 +415,8 @@ async function main(): Promise<void> {
   if (step === 'download-hebrew') return void (await downloadHebrew());
   if (step === 'ingest-hebrew') return void (await ingestHebrew());
   if (step === 'ingest-thiagobodruk') return void (await ingestThiagobodruk(arg('code')));
+  if (step === 'ingest-hebrew-lexicon') return void (await ingestHebrewStrongs());
+  if (step === 'ingest-hebrew-interlinear') return void (await ingestHebrewInterlinear());
   // padrão: download + build
   await download();
   build();

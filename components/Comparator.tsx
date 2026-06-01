@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Book, Token } from '@/lib/corpus';
+import type { HebrewWord } from '@/lib/hebrew';
 import type { ChapterView, ChapterViewRow } from '@/lib/chapter-view';
 import type { Translation } from '@/lib/translations';
 import { GreekVerse } from './greek/GreekVerse';
 import { TokenSheet } from './greek/TokenSheet';
+import { HebrewVerse } from './hebrew/HebrewVerse';
+import { HebrewWordSheet } from './hebrew/HebrewWordSheet';
 import { StudyModal } from './StudyModal';
 
 const TESTAMENT_LABELS: Record<string, string> = {
@@ -278,6 +281,8 @@ export function Comparator({
   const [studyOpen, setStudyOpen] = useState(false);
   // Token grego selecionado (abre o TokenSheet com os dados linguísticos).
   const [selected, setSelected] = useState<{ verse: number; token: Token } | null>(null);
+  // Palavra hebraica selecionada (abre o HebrewWordSheet, breakdown por morfema).
+  const [selectedHebrew, setSelectedHebrew] = useState<{ verse: number; word: HebrewWord } | null>(null);
   const [highlight, setHighlight] = useState<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
 
@@ -378,6 +383,8 @@ export function Comparator({
         <div className="flex flex-col">
           {rows.map((row) => {
             const activePosition = selected?.verse === row.verse ? selected.token.position : null;
+            const activeHebrewPosition =
+              selectedHebrew?.verse === row.verse ? selectedHebrew.word.position : null;
             return (
               <div
                 key={row.verse}
@@ -390,10 +397,13 @@ export function Comparator({
                 {translations.map((t) => {
                   const isOriginal = t.code === originalCode;
                   const text = row.texts[t.code] ?? null;
-                  // Coluna original: tokens gregos clicáveis (interlinear). Cai
-                  // para o texto plano se faltarem tokens naquele versículo.
+                  // Coluna original: interlinear clicável — tokens gregos (NT) ou
+                  // palavras hebraicas (AT). Cai para o texto plano se faltarem
+                  // dados naquele versículo.
                   const originalTokens = isOriginal ? row.tokens : null;
                   const showTokens = originalTokens != null && originalTokens.length > 0;
+                  const originalHebrew = isOriginal ? row.hebrewWords : null;
+                  const showHebrew = originalHebrew != null && originalHebrew.length > 0;
                   return (
                     <div key={t.code} className="mb-2 last:mb-0 sm:mb-0">
                       {/* Rótulo da versão por bloco (só mobile, pois empilha). */}
@@ -409,6 +419,12 @@ export function Comparator({
                             tokens={originalTokens}
                             activePosition={activePosition}
                             onSelect={(token) => setSelected({ verse: row.verse, token })}
+                          />
+                        ) : showHebrew ? (
+                          <HebrewVerse
+                            words={originalHebrew}
+                            activePosition={activeHebrewPosition}
+                            onSelect={(word) => setSelectedHebrew({ verse: row.verse, word })}
                           />
                         ) : text ? (
                           <span
@@ -472,6 +488,10 @@ export function Comparator({
       )}
 
       {selected && <TokenSheet token={selected.token} onClose={() => setSelected(null)} />}
+
+      {selectedHebrew && (
+        <HebrewWordSheet word={selectedHebrew.word} onClose={() => setSelectedHebrew(null)} />
+      )}
     </div>
   );
 }
