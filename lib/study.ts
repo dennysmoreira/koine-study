@@ -172,8 +172,17 @@ function greekVerseLexicon(tokens: { lemma: { lemma: string; gloss_pt: string | 
 export async function buildChatContext(
   references: StudyReference[],
   sources: StudySource[],
+  studyContent?: string | null,
 ): Promise<string> {
   const lines: string[] = [];
+
+  // 0) Conteúdo já gerado deste estudo (fluxo one-shot). É a base do que o usuário
+  //    construiu sobre o(s) versículo(s); sem isto, um estudo que tenha apenas
+  //    `content` (sem referências/fontes) pareceria "vazio" ao chat.
+  const generated = studyContent?.trim();
+  if (generated) {
+    lines.push('ESTUDO ATUAL (conteúdo já gerado deste estudo):', generated, '');
+  }
 
   // 1) Versículos citados — agrupa por (osis, chapter) para 1 fetch por capítulo.
   const refs = references.slice(0, MAX_CHAT_REFERENCES);

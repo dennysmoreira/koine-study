@@ -16,6 +16,9 @@ import { isStudyMode, getStudyMode } from '@/lib/study-modes';
 // Precisa de Node (server-only deps) e nunca pode ser cacheado (resposta em stream).
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Respostas longas em streaming podem ultrapassar o limite padrão (~10s) da
+// função no Vercel free tier e ser cortadas no meio. 60s é o teto do Hobby.
+export const maxDuration = 60;
 
 interface StudyRequest {
   osis?: unknown;

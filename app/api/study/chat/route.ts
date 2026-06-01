@@ -16,6 +16,9 @@ import { getStudyWorkspace } from '@/lib/saved-studies';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Respostas longas em streaming podem ultrapassar o limite padrão (~10s) da
+// função no Vercel free tier e ser cortadas no meio. 60s é o teto do Hobby.
+export const maxDuration = 60;
 
 // Histórico injetado no prompt: últimas N trocas (mantém a conversa coerente sem
 // estourar o contexto em estudos longos).
@@ -67,7 +70,11 @@ export async function POST(req: Request): Promise<Response> {
   if (insErr) return bad(insErr.message, 500);
 
   // 5) Monta contexto (versículos citados + fontes) e prompt (histórico + mensagem).
-  const context = await buildChatContext(workspace.references, workspace.sources);
+  const context = await buildChatContext(
+    workspace.references,
+    workspace.sources,
+    workspace.study.content,
+  );
   const history = workspace.messages.slice(-MAX_HISTORY);
   const prompt = buildChatPrompt(context, history, message);
 
