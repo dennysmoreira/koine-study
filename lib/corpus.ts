@@ -82,17 +82,14 @@ export async function getBookByOsis(osis: string): Promise<Book | null> {
   return (data as Book | null) ?? null;
 }
 
-// lista de capítulos existentes para um livro (distintos, ordenados)
+// lista de capítulos existentes para um livro (distintos, ordenados).
+// Usa a RPC `corpus_chapters` (DISTINCT no banco): `select chapter` cru trazia
+// uma linha por versículo e estourava o teto de 1.000 linhas do PostgREST
+// (Mateus tem 1.068 versículos), truncando a lista de capítulos.
 async function getChapterNumbers(bookId: number): Promise<number[]> {
-  const { data, error } = await supabase
-    .from('verses')
-    .select('chapter')
-    .eq('book_id', bookId)
-    .order('chapter');
+  const { data, error } = await supabase.rpc('corpus_chapters', { p_book_id: bookId });
   if (error) throw new Error(`getChapterNumbers: ${error.message}`);
-  const set = new Set<number>();
-  for (const row of data ?? []) set.add((row as { chapter: number }).chapter);
-  return [...set].sort((a, b) => a - b);
+  return ((data ?? []) as number[]).slice().sort((a, b) => a - b);
 }
 
 async function fetchChapter(
