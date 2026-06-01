@@ -13,12 +13,13 @@ import 'server-only';
 
 // Modelos de geração, em ordem de preferência. A cadeia é um FAILOVER: o 1º que
 // responder 200 é usado; se um devolver 429 (cota diária estourada) ou erro, cai
-// para o próximo. Por isso colocamos os 2.5 (melhor qualidade, porém com cota
-// diária baixa no free tier) à frente dos 2.0 (qualidade boa e cota bem maior):
-// usa-se o melhor enquanto dura e degrada graciosamente quando a cota acaba.
+// para o próximo. O `flash` (melhor qualidade, porém com cota diária menor no free
+// tier) vem à frente do `flash-lite` (qualidade boa e cota bem maior): usa-se o
+// melhor enquanto dura e degrada graciosamente quando a cota acaba. Os modelos 2.0
+// foram desativados pelo Google em 2026-06-01 e por isso saíram da cadeia.
 const GEN_MODELS = (
   process.env.GEMINI_GEN_MODELS ??
-  'gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash,gemini-2.0-flash-lite'
+  'gemini-2.5-flash,gemini-2.5-flash-lite'
 )
   .split(',')
   .map((s) => s.trim())
