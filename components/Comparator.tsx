@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { Book, Token } from '@/lib/corpus';
 import type { HebrewWord } from '@/lib/hebrew';
 import type { ChapterView, ChapterViewRow } from '@/lib/chapter-view';
@@ -14,6 +14,7 @@ import { HebrewWordSheet } from './hebrew/HebrewWordSheet';
 import { StudyModal } from './StudyModal';
 import { VerseSelectionBar } from './VerseSelectionBar';
 import type { ReferenceInput } from '@/app/study/actions';
+import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
 
 const TESTAMENT_LABELS: Record<string, string> = {
   NT: 'Novo Testamento',
@@ -32,15 +33,21 @@ function useEscapeToClose(onClose: () => void) {
   }, [onClose]);
 }
 
-// Monta a URL do comparador preservando as versões selecionadas.
-function compareHref(osis: string, chapter: number, codes: string[]): string {
-  const q = codes.length > 0 ? `?v=${codes.join(',')}` : '';
+// Monta a URL do comparador preservando as versões selecionadas. `goto` (quando
+// informado) pede ao comparador para rolar/realçar aquele versículo ao montar.
+function compareHref(osis: string, chapter: number, codes: string[], goto?: number): string {
+  const params: string[] = [];
+  if (codes.length > 0) params.push(`v=${codes.join(',')}`);
+  if (goto != null) params.push(`goto=${goto}`);
+  const q = params.length > 0 ? `?${params.join('&')}` : '';
   return `/compare/${osis}/${chapter}${q}`;
 }
 
-// Sheet de navegação: livro + capítulo + versículo. Trocar de livro/capítulo
-// navega para outra rota (novo fetch no servidor), mantendo as versões
-// selecionadas; o versículo apenas rola a página atual, já renderizada.
+// Sheet de navegação: cascata Livro → Capítulo → Versículo, escolhidos de uma vez.
+// Capítulos e versículos do livro escolhido vêm de server actions sob demanda
+// (não só do livro já carregado). Escolher um versículo navega para a rota
+// (preservando as versões) com `goto` para rolar até ele — ou, se já estamos no
+// capítulo carregado, apenas rola a página atual sem refetch.
 function NavSheet({
   books,
   current,
@@ -62,12 +69,18 @@ function NavSheet({
 }) {
   const router = useRouter();
   useEscapeToClose(onClose);
-  // Livro escolhido localmente: trocar o select NÃO navega. A navegação só
-  // acontece ao clicar em "Pesquisar" (ou ao escolher capítulo/versículo do
-  // livro já carregado). Capítulos e versículos só existem no cliente para o
-  // livro atualmente carregado, então as grades ficam ocultas até pesquisar.
+
   const [selectedOsis, setSelectedOsis] = useState(current.osis_code);
-  const sameAsLoaded = selectedOsis === current.osis_code;
+  const [chapterList, setChapterList] = useState<number[]>(chapters);
+  const [loadingChapters, setLoadingChapters] = useState(false);
+  const [selectedChapter, setSelectedChapter] = useState<number | null>(chapter);
+  const [verseList, setVerseList] = useState<number[]>(rows.map((r) => r.verse));
+  const [loadingVerses, setLoadingVerses] = useState(false);
+
+  // Token de requisição: descarta resultados de fetches obsoletos quando o
+  // usuário troca de livro/capítulo rápido (evita aplicar uma resposta antiga).
+  const reqId = useRef(0);
+
   const groups = new Map<string, Book[]>();
   for (const b of books) {
     const list = groups.get(b.testament) ?? [];
@@ -75,8 +88,57 @@ function NavSheet({
     groups.set(b.testament, list);
   }
 
-  const search = () => {
-    router.push(compareHref(selectedOsis, 1, codes));
+  const isLoadedChapter = (osis: string, ch: number | null) =>
+    osis === current.osis_code && ch === chapter;
+
+  const onBookChange = async (osis: string) => {
+    setSelectedOsis(osis);
+    setSelectedChapter(null);
+    setVerseList([]);
+    if (osis === current.osis_code) {
+      setChapterList(chapters);
+      return;
+    }
+    const id = ++reqId.current;
+    setLoadingChapters(true);
+    try {
+      const list = await getBookChapters(osis);
+      if (id === reqId.current) setChapterList(list);
+    } finally {
+      if (id === reqId.current) setLoadingChapters(false);
+    }
+  };
+
+  const onChapterSelect = async (ch: number) => {
+    setSelectedChapter(ch);
+    if (isLoadedChapter(selectedOsis, ch)) {
+      setVerseList(rows.map((r) => r.verse)); // já temos os versículos do prop
+      return;
+    }
+    const id = ++reqId.current;
+    setVerseList([]);
+    setLoadingVerses(true);
+    try {
+      const list = await getChapterVerses(selectedOsis, ch);
+      if (id === reqId.current) setVerseList(list);
+    } finally {
+      if (id === reqId.current) setLoadingVerses(false);
+    }
+  };
+
+  const goToChapterTop = () => {
+    if (selectedChapter == null) return;
+    router.push(compareHref(selectedOsis, selectedChapter, codes));
+    onClose();
+  };
+
+  const onVerseSelect = (verse: number) => {
+    if (selectedChapter == null) return;
+    if (isLoadedChapter(selectedOsis, selectedChapter)) {
+      onVerse(verse); // capítulo já renderizado: rola na própria página
+      return;
+    }
+    router.push(compareHref(selectedOsis, selectedChapter, codes, verse));
     onClose();
   };
 
@@ -89,75 +151,76 @@ function NavSheet({
         <label htmlFor="cmp-book" className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
           Livro
         </label>
-        <div className="mt-1 flex gap-2">
-          <select
-            id="cmp-book"
-            value={selectedOsis}
-            onChange={(e) => setSelectedOsis(e.target.value)}
-            className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-800"
-          >
-            {[...groups.entries()].map(([testament, list]) => (
-              <optgroup key={testament} label={TESTAMENT_LABELS[testament] ?? testament}>
-                {list.map((b) => (
-                  <option key={b.id} value={b.osis_code}>
-                    {b.name_pt}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={search}
-            className="shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
-          >
-            Pesquisar
-          </button>
-        </div>
-
-        {sameAsLoaded ? (
-          <>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Capítulo</p>
-            <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
-              {chapters.map((n) => (
-                <Link
-                  key={n}
-                  href={compareHref(current.osis_code, n, codes)}
-                  onClick={onClose}
-                  className={`flex h-9 items-center justify-center rounded-md text-sm transition ${
-                    n === chapter
-                      ? 'bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100'
-                      : 'bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  {n}
-                </Link>
+        <select
+          id="cmp-book"
+          value={selectedOsis}
+          onChange={(e) => onBookChange(e.target.value)}
+          className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-800"
+        >
+          {[...groups.entries()].map(([testament, list]) => (
+            <optgroup key={testament} label={TESTAMENT_LABELS[testament] ?? testament}>
+              {list.map((b) => (
+                <option key={b.id} value={b.osis_code}>
+                  {b.name_pt}
+                </option>
               ))}
-            </div>
+            </optgroup>
+          ))}
+        </select>
 
-            {rows.length > 0 && (
-              <>
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Versículo</p>
-                <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
-                  {rows.map((r) => (
-                    <button
-                      key={r.verse}
-                      type="button"
-                      onClick={() => onVerse(r.verse)}
-                      className="flex h-9 items-center justify-center rounded-md bg-neutral-100 text-sm transition hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
-                    >
-                      {r.verse}
-                    </button>
-                  ))}
-                </div>
-              </>
+        <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Capítulo</p>
+        {loadingChapters ? (
+          <p className="mt-2 text-sm text-neutral-400">Carregando capítulos…</p>
+        ) : (
+          <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
+            {chapterList.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onChapterSelect(n)}
+                className={`flex h-9 items-center justify-center rounded-md text-sm transition ${
+                  n === selectedChapter
+                    ? 'bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100'
+                    : 'bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selectedChapter != null && (
+          <>
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Versículo</p>
+              {!isLoadedChapter(selectedOsis, selectedChapter) && (
+                <button
+                  type="button"
+                  onClick={goToChapterTop}
+                  className="text-xs font-medium text-amber-600 hover:underline dark:text-amber-400"
+                >
+                  Abrir capítulo →
+                </button>
+              )}
+            </div>
+            {loadingVerses ? (
+              <p className="mt-2 text-sm text-neutral-400">Carregando versículos…</p>
+            ) : (
+              <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
+                {verseList.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => onVerseSelect(v)}
+                    className="flex h-9 items-center justify-center rounded-md bg-neutral-100 text-sm transition hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
             )}
           </>
-        ) : (
-          <p className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
-            Clique em <span className="font-semibold">Pesquisar</span> para abrir o livro selecionado e então
-            escolher capítulo e versículo.
-          </p>
         )}
       </div>
     </div>
@@ -320,11 +383,25 @@ export function Comparator({
   const [selectedHebrew, setSelectedHebrew] = useState<{ verse: number; word: HebrewWord } | null>(null);
   const [highlight, setHighlight] = useState<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
+  const searchParams = useSearchParams();
 
   // Limpa o timer do realce ao desmontar, evitando setState após unmount.
   useEffect(() => () => {
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
   }, []);
+
+  // Memória do "último lido": ao abrir /compare sem rota, o redirector usa isto
+  // para retomar o livro/capítulo onde o usuário parou (em vez de João 1 fixo).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'koine:compare:last',
+        JSON.stringify({ osis: book.osis_code, chapter: number }),
+      );
+    } catch {
+      // localStorage indisponível (modo privado/SSR) — apenas não persiste.
+    }
+  }, [book.osis_code, number]);
 
   const codes = translations.map((t) => t.code);
   const original = translations.find((t) => t.is_original) ?? null;
@@ -341,18 +418,60 @@ export function Comparator({
   // arbitrário). Só vale no breakpoint `sm` (sm:grid); no mobile empilha.
   const gridStyle = { gridTemplateColumns: `repeat(${translations.length}, minmax(0, 1fr))` };
 
-  const goToVerse = (verse: number) => {
-    setNavOpen(false);
+  // Realça um versículo por 2s (transitório). Extraído para reuso pela rolagem
+  // in-page e pelo deep-link (?goto), que querem o mesmo destaque âmbar.
+  const flashHighlight = (verse: number) => {
     setHighlight(verse);
-    requestAnimationFrame(() => {
-      document.getElementById(`v${verse}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
     highlightTimer.current = window.setTimeout(
       () => setHighlight((cur) => (cur === verse ? null : cur)),
       2000,
     );
   };
+
+  const goToVerse = (verse: number) => {
+    setNavOpen(false);
+    flashHighlight(verse);
+    requestAnimationFrame(() => {
+      document.getElementById(`v${verse}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  // Deep-link de versículo: ao chegar de outro capítulo via filtro (?goto=N), rola
+  // até o versículo e o realça. A rolagem usa retry curto porque o capítulo
+  // recém-montado ainda assenta o layout (um rAF único viraria no-op). A limpeza
+  // do `goto` da URL é feita com history.replaceState — NÃO com router.replace —
+  // pois um replace dispara re-render do Next que cancela a rolagem em andamento.
+  // O guard `gotoDone` só é marcado DENTRO do tick bem-sucedido: marcá-lo antes
+  // quebra no StrictMode (mount→cleanup→mount cancela o 1º timer e o 2º mount
+  // abortaria), deixando o scroll sem rodar.
+  const gotoDone = useRef(false);
+  useEffect(() => {
+    const raw = searchParams.get('goto');
+    if (!raw || gotoDone.current) return;
+    const verse = Number(raw);
+    if (!Number.isInteger(verse)) return;
+
+    let tries = 0;
+    let timer = 0;
+    const tick = () => {
+      const el = document.getElementById(`v${verse}`);
+      if (el) {
+        gotoDone.current = true;
+        el.scrollIntoView({ block: 'start' });
+        flashHighlight(verse);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('goto');
+        window.history.replaceState(window.history.state, '', url.pathname + url.search);
+        return;
+      }
+      if (tries++ < 40) timer = window.setTimeout(tick, 50);
+    };
+    timer = window.setTimeout(tick, 50);
+    return () => window.clearTimeout(timer);
+    // flashHighlight é estável o bastante para este efeito de mount/troca de rota.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const toggleVerse = (verse: number) => {
     setSelectedVerses((prev) => {
