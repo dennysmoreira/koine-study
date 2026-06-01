@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 
 // Input de busca do dicionário. Mantém o termo na URL (?q=) para que os
 // resultados sejam renderizados no servidor; debounce evita navegar a cada tecla.
-export function DictionarySearch({ initial }: { initial: string }) {
+// O idioma ativo (?lang=) é preservado para não perder a aba ao buscar.
+export function DictionarySearch({ initial, lang }: { initial: string; lang: 'grc' | 'hbo' }) {
   const router = useRouter();
   const [value, setValue] = useState(initial);
   const first = useRef(true);
@@ -17,11 +18,15 @@ export function DictionarySearch({ initial }: { initial: string }) {
       return;
     }
     const id = setTimeout(() => {
+      const params = new URLSearchParams();
       const q = value.trim();
-      router.replace(q ? `/dictionary?q=${encodeURIComponent(q)}` : '/dictionary');
+      if (q) params.set('q', q);
+      if (lang === 'hbo') params.set('lang', 'hbo');
+      const qs = params.toString();
+      router.replace(qs ? `/dictionary?${qs}` : '/dictionary');
     }, 300);
     return () => clearTimeout(id);
-  }, [value, router]);
+  }, [value, lang, router]);
 
   return (
     <input
@@ -30,7 +35,11 @@ export function DictionarySearch({ initial }: { initial: string }) {
       autoComplete="off"
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      placeholder="Buscar por grego, português ou Strong's…"
+      placeholder={
+        lang === 'hbo'
+          ? 'Buscar por hebraico, transliteração, português ou Strong’s…'
+          : 'Buscar por grego, português ou Strong’s…'
+      }
       className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-base outline-none transition focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
     />
   );

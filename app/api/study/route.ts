@@ -10,7 +10,7 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { streamChatText } from '@/lib/gemini';
 import { getUserGeminiKey } from '@/lib/user-settings';
-import { buildStudyContext, buildStudyPrompt, STUDY_SYSTEM } from '@/lib/study';
+import { buildStudyContext, buildStudyPrompt, buildStudySystem } from '@/lib/study';
 import { isStudyMode, getStudyMode } from '@/lib/study-modes';
 
 // Precisa de Node (server-only deps) e nunca pode ser cacheado (resposta em stream).
@@ -69,17 +69,22 @@ export async function POST(req: Request): Promise<Response> {
     return bad('Este modo exige uma pergunta.');
   }
 
-  // 3) Monta o contexto do capítulo (grego + traduções + glossário).
+  // 3) Monta o contexto do capítulo (texto original + traduções + glossário).
   const context = await buildStudyContext(osis, chapter, codes);
   if (!context) {
     return bad('Capítulo não encontrado.', 404);
   }
 
-  // 4) Gera em streaming.
+  // 4) Gera em streaming. O system varia conforme o testamento (grego no NT,
+  //    hebraico no AT) para o modelo assumir o papel correto.
   const prompt = buildStudyPrompt(mode, context.text, userPrompt);
   try {
     const userGeminiKey = await getUserGeminiKey();
-    const stream = await streamChatText({ system: STUDY_SYSTEM, prompt, userGeminiKey });
+    const stream = await streamChatText({
+      system: buildStudySystem(context.testament),
+      prompt,
+      userGeminiKey,
+    });
     return new Response(stream, {
       headers: {
         'content-type': 'text/plain; charset=utf-8',

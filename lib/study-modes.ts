@@ -33,7 +33,7 @@ export const STUDY_MODES: StudyModeMeta[] = [
       '- Um título e o tema central (uma frase).',
       '- Uma introdução breve que situe o texto.',
       '- De 2 a 4 pontos principais, CADA UM ancorado em versículos específicos (cite a referência, ex.: "v. 3").',
-      '- Quando enriquecer o ponto, traga o termo grego-chave (transliterado) e seu sentido, com base no glossário.',
+      '- Quando enriquecer o ponto, traga o termo-chave no idioma original (grego ou hebraico, transliterado) e seu sentido, com base no glossário.',
       '- Uma aplicação prática e um apelo final.',
       'Seja fiel ao texto; não invente fatos que não estejam no material fornecido.',
     ].join('\n'),
@@ -47,7 +47,7 @@ export const STUDY_MODES: StudyModeMeta[] = [
     instruction: [
       'Faça um ESTUDO EXEGÉTICO do trecho, em Markdown:',
       '- Contexto e estrutura do texto.',
-      '- Análise dos principais TERMOS GREGOS (forma, transliteração e sentido), usando o texto grego e o glossário fornecidos.',
+      '- Análise dos principais TERMOS NO IDIOMA ORIGINAL (grego ou hebraico: forma, transliteração e sentido), usando o texto original e o glossário fornecidos.',
       '- Observações gramaticais relevantes quando o original esclarecer o sentido.',
       '- Implicações teológicas, sempre citando as referências de versículo.',
       'Baseie-se ESTRITAMENTE no material fornecido; não invente dados linguísticos.',

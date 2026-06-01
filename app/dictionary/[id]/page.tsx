@@ -26,13 +26,16 @@ export default async function DictionaryEntryPage({ params }: { params: { id: st
     data: { user },
   } = await supabase.auth.getUser();
 
-  const inDeck = user ? await isInDeck(supabase, lemmaId) : false;
+  // Vocabulário (SRS) é grego-only; o baralho só faz sentido para lemas do NT.
+  const isHebrew = entry.language === 'hbo';
+  const inDeck = user && !isHebrew ? await isInDeck(supabase, lemmaId) : false;
+  const bdb = entry.bdb_def_pt ?? entry.bdb_def;
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-4 py-8">
       <header className="mb-6">
         <Link
-          href="/dictionary"
+          href={isHebrew ? '/dictionary?lang=hbo' : '/dictionary'}
           className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
         >
           ← Dicionário
@@ -40,21 +43,46 @@ export default async function DictionaryEntryPage({ params }: { params: { id: st
       </header>
 
       <div className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-        <h1 className="font-greek text-4xl leading-none">{entry.lemma}</h1>
-        <p className="mt-2 text-sm italic text-neutral-400">{transliterate(entry.lemma)}</p>
+        {isHebrew ? (
+          <>
+            <h1 dir="rtl" className="font-hebrew text-5xl leading-none">
+              {entry.lemma}
+            </h1>
+            {entry.xlit && <p className="mt-3 text-sm italic text-neutral-400">{entry.xlit}</p>}
+            {entry.pron && <p className="text-xs text-neutral-400">/{entry.pron}/</p>}
+          </>
+        ) : (
+          <>
+            <h1 className="font-greek text-4xl leading-none">{entry.lemma}</h1>
+            <p className="mt-2 text-sm italic text-neutral-400">{transliterate(entry.lemma)}</p>
+          </>
+        )}
         {entry.gloss_pt && <p className="mt-3 text-lg">{entry.gloss_pt}</p>}
         {entry.gloss_en && (
           <p className="mt-1 text-sm text-neutral-500">{entry.gloss_en}</p>
         )}
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-400">
-          <span>Aparece {entry.frequency}× no NT</span>
+          {!isHebrew && <span>Aparece {entry.frequency}× no NT</span>}
           {entry.strongs && <span>Strong&apos;s {entry.strongs}</span>}
         </div>
       </div>
 
-      <div className="mt-5">
-        <AddToDeckButton lemmaId={lemmaId} loggedIn={Boolean(user)} initiallyInDeck={inDeck} />
-      </div>
+      {!isHebrew && (
+        <div className="mt-5">
+          <AddToDeckButton lemmaId={lemmaId} loggedIn={Boolean(user)} initiallyInDeck={inDeck} />
+        </div>
+      )}
+
+      {isHebrew && bdb && (
+        <section className="mt-8">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-400">
+            BDB (Brown-Driver-Briggs)
+          </h2>
+          <p className="whitespace-pre-line text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
+            {bdb}
+          </p>
+        </section>
+      )}
 
       {entry.abbott_smith && (
         <section className="mt-8">

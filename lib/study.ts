@@ -13,33 +13,89 @@ import { getStudyMode, type StudyMode } from './study-modes';
 import type { StudyMessage, StudyReference, StudySource } from './saved-studies';
 
 // Instrução de sistema comum a todos os modos: define o papel e as travas de
-// fidelidade ao texto (anti-alucinação).
-export const STUDY_SYSTEM = [
-  'Você é um assistente de exegese bíblica e homilética, especialista em grego koiné do Novo Testamento.',
-  'Você recebe, de um capítulo: o texto grego original (SBLGNT), uma ou mais traduções e um glossário lexical (lema → sentido).',
-  'Baseie-se ESTRITAMENTE no material fornecido. Não invente dados linguísticos, históricos ou referências que não estejam no contexto.',
-  'Responda SEMPRE em português do Brasil (PT-BR) em TEXTO PURO, sem Markdown: não use #, *, _, crases, traços de lista, nem ** para negrito. Organize com parágrafos curtos separados por linha em branco; para enumerar, use itens com "1.", "2." em linhas próprias.',
-  'Quando citar o grego, traga a transliteração e o sentido conforme o glossário.',
-].join('\n');
+// fidelidade ao texto (anti-alucinação). Varia conforme o testamento do livro,
+// pois o idioma original muda (grego koiné no NT, hebraico bíblico no AT).
+export function buildStudySystem(testament: 'OT' | 'NT'): string {
+  const isOT = testament === 'OT';
+  const role = isOT
+    ? 'Você é um assistente de exegese bíblica e homilética, especialista em hebraico bíblico do Antigo Testamento.'
+    : 'Você é um assistente de exegese bíblica e homilética, especialista em grego koiné do Novo Testamento.';
+  const material = isOT
+    ? 'Você recebe, de um capítulo: o texto hebraico original (WLC), uma ou mais traduções e um glossário lexical (lema → sentido).'
+    : 'Você recebe, de um capítulo: o texto grego original (SBLGNT), uma ou mais traduções e um glossário lexical (lema → sentido).';
+  const cite = isOT
+    ? 'Quando citar o hebraico, traga a transliteração e o sentido conforme o glossário.'
+    : 'Quando citar o grego, traga a transliteração e o sentido conforme o glossário.';
+  return [
+    role,
+    material,
+    'Baseie-se ESTRITAMENTE no material fornecido. Não invente dados linguísticos, históricos ou referências que não estejam no contexto.',
+    'Responda SEMPRE em português do Brasil (PT-BR) em TEXTO PURO, sem Markdown: não use #, *, _, crases, traços de lista, nem ** para negrito. Organize com parágrafos curtos separados por linha em branco; para enumerar, use itens com "1.", "2." em linhas próprias.',
+    cite,
+  ].join('\n');
+}
 
 // Limite defensivo de lemas no glossário para não estourar o prompt em capítulos
 // muito longos (mantém os primeiros encontrados — cobre o vocabulário principal).
 const MAX_GLOSSARY = 120;
 
 /**
- * Monta o bloco de contexto do capítulo. Sempre inclui o grego e o glossário
- * (fundamentação no original), além das traduções selecionadas no comparador.
- * Retorna null se o capítulo não existir.
+ * Monta o bloco de contexto do capítulo. Sempre inclui o texto original e o
+ * glossário (fundamentação no original), além das traduções selecionadas no
+ * comparador. O idioma original depende do testamento do livro: grego (SBLGNT)
+ * no NT, hebraico (WLC) no AT. Retorna null se o capítulo não existir.
  */
 export async function buildStudyContext(
   osis: string,
   chapter: number,
   codes: string[],
-): Promise<{ text: string; bookName: string } | null> {
-  const [greek, parallel] = await Promise.all([
-    getChapter(osis, chapter),
-    codes.length > 0 ? getParallelChapter(osis, chapter, codes) : Promise.resolve(null),
-  ]);
+): Promise<{ text: string; bookName: string; testament: 'OT' | 'NT' } | null> {
+  const book = await getBookByOsis(osis);
+  if (!book) return null;
+
+  const parallelPromise =
+    codes.length > 0 ? getParallelChapter(osis, chapter, codes) : Promise.resolve(null);
+
+  if (book.testament === 'OT') {
+    const [hebrew, parallel] = await Promise.all([getHebrewChapter(osis, chapter), parallelPromise]);
+    if (!hebrew) return null;
+
+    const lines: string[] = [];
+    lines.push(`CAPÍTULO: ${book.name_pt} ${chapter}`);
+
+    // 1) Texto hebraico por versículo (surfaces na ordem de posição).
+    lines.push('', 'TEXTO HEBRAICO (WLC):');
+    for (const v of hebrew.verses) {
+      const surface = v.words.map((w) => w.surface).join(' ').trim();
+      if (surface) lines.push(`v${v.verse} ${surface}`);
+    }
+
+    appendTranslations(lines, parallel);
+
+    // 3) Glossário: lemas (morfemas) únicos do capítulo → sentido.
+    const seen = new Set<string>();
+    const glossary: string[] = [];
+    outer: for (const v of hebrew.verses) {
+      for (const w of v.words) {
+        for (const m of w.morphemes) {
+          if (!m.lemmaForm || seen.has(m.lemmaForm)) continue;
+          const sense = m.gloss ?? m.bdbDef;
+          if (!sense) continue;
+          seen.add(m.lemmaForm);
+          const strongs = m.strongs ? ` (${m.strongs})` : '';
+          glossary.push(`${m.lemmaForm}${strongs}: ${sense}`);
+          if (glossary.length >= MAX_GLOSSARY) break outer;
+        }
+      }
+    }
+    if (glossary.length > 0) {
+      lines.push('', 'GLOSSÁRIO (lemas-chave do capítulo):', ...glossary);
+    }
+
+    return { text: lines.join('\n'), bookName: book.name_pt, testament: 'OT' };
+  }
+
+  const [greek, parallel] = await Promise.all([getChapter(osis, chapter), parallelPromise]);
   if (!greek) return null;
 
   const lines: string[] = [];
@@ -52,18 +108,7 @@ export async function buildStudyContext(
     if (surface) lines.push(`v${v.verse} ${surface}`);
   }
 
-  // 2) Traduções selecionadas no comparador (se houver).
-  if (parallel && parallel.translations.length > 0) {
-    const names = new Map(parallel.translations.map((t) => [t.code, t.name]));
-    lines.push('', 'TRADUÇÕES:');
-    for (const row of parallel.rows) {
-      for (const t of parallel.translations) {
-        if (t.is_original) continue; // o grego já foi listado acima
-        const text = row.texts[t.code];
-        if (text) lines.push(`v${row.verse} [${names.get(t.code)}] ${text}`);
-      }
-    }
-  }
+  appendTranslations(lines, parallel);
 
   // 3) Glossário: lemas únicos do capítulo → sentido (PT, com fallback EN).
   const seen = new Set<string>();
@@ -85,7 +130,24 @@ export async function buildStudyContext(
     lines.push('', 'GLOSSÁRIO (lemas-chave do capítulo):', ...glossary);
   }
 
-  return { text: lines.join('\n'), bookName: greek.book.name_pt };
+  return { text: lines.join('\n'), bookName: greek.book.name_pt, testament: 'NT' };
+}
+
+/** Anexa o bloco de traduções selecionadas no comparador (se houver). */
+function appendTranslations(
+  lines: string[],
+  parallel: Awaited<ReturnType<typeof getParallelChapter>> | null,
+): void {
+  if (!parallel || parallel.translations.length === 0) return;
+  const names = new Map(parallel.translations.map((t) => [t.code, t.name]));
+  lines.push('', 'TRADUÇÕES:');
+  for (const row of parallel.rows) {
+    for (const t of parallel.translations) {
+      if (t.is_original) continue; // o texto original já foi listado acima
+      const text = row.texts[t.code];
+      if (text) lines.push(`v${row.verse} [${names.get(t.code)}] ${text}`);
+    }
+  }
 }
 
 /**
