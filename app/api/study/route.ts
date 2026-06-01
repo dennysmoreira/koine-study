@@ -8,7 +8,8 @@
  */
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
-import { streamGeminiText } from '@/lib/gemini';
+import { streamChatText } from '@/lib/gemini';
+import { getUserGeminiKey } from '@/lib/user-settings';
 import { buildStudyContext, buildStudyPrompt, STUDY_SYSTEM } from '@/lib/study';
 import { isStudyMode, getStudyMode } from '@/lib/study-modes';
 
@@ -74,7 +75,8 @@ export async function POST(req: Request): Promise<Response> {
   // 4) Gera em streaming.
   const prompt = buildStudyPrompt(mode, context.text, userPrompt);
   try {
-    const stream = await streamGeminiText({ system: STUDY_SYSTEM, prompt });
+    const userGeminiKey = await getUserGeminiKey();
+    const stream = await streamChatText({ system: STUDY_SYSTEM, prompt, userGeminiKey });
     return new Response(stream, {
       headers: {
         'content-type': 'text/plain; charset=utf-8',

@@ -9,7 +9,8 @@
  */
 import 'server-only';
 import { createClient } from '@/lib/supabase/server';
-import { streamGeminiText } from '@/lib/gemini';
+import { streamChatText } from '@/lib/gemini';
+import { getUserGeminiKey } from '@/lib/user-settings';
 import { buildChatContext, buildChatPrompt, STUDY_CHAT_SYSTEM } from '@/lib/study';
 import { getStudyWorkspace } from '@/lib/saved-studies';
 
@@ -74,9 +75,10 @@ export async function POST(req: Request): Promise<Response> {
   //    se o cliente abortar no meio (cancel) — um TransformStream.flush() NÃO roda
   //    quando o consumidor cancela, então usamos um ReadableStream com pull+cancel
   //    para não perder o parcial e manter o thread consistente ao recarregar.
+  const userGeminiKey = await getUserGeminiKey();
   let geminiStream: ReadableStream<Uint8Array>;
   try {
-    geminiStream = await streamGeminiText({ system: STUDY_CHAT_SYSTEM, prompt });
+    geminiStream = await streamChatText({ system: STUDY_CHAT_SYSTEM, prompt, userGeminiKey });
   } catch (e) {
     return bad(e instanceof Error ? e.message : 'Falha ao gerar a resposta.', 502);
   }
