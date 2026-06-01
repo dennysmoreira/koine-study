@@ -7,6 +7,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { isStudyMode, getStudyMode } from '@/lib/study-modes';
+import { extractFileText } from '@/lib/extract-text';
 
 export interface SaveStudyInput {
   osis: string;
@@ -346,11 +347,22 @@ export async function addFileSource(
     .upload(path, bytes, { contentType: file.type || 'application/octet-stream', upsert: false });
   if (upErr) return { ok: false, error: upErr.message };
 
+  // Extrai o texto agora (PDF/texto) para alimentar o contexto da IA. Falha de
+  // extração não aborta o upload: a fonte ainda fica anexada (só sem texto), e o
+  // backfill lazy no chat tenta de novo. PDF escaneado/formatos sem texto → null.
+  let extracted: string | null = null;
+  try {
+    extracted = await extractFileText(bytes, file.type || null, file.name || '');
+  } catch {
+    extracted = null;
+  }
+
   const { error } = await supabase.from('study_sources').insert({
     study_id: studyId,
     user_id: user.id,
     kind: 'file',
     title: (file.name || 'Arquivo').slice(0, 200),
+    content: extracted,
     storage_path: path,
     mime_type: file.type || null,
     byte_size: file.size,

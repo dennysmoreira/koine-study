@@ -7,6 +7,7 @@
 import 'server-only';
 import { createClient } from './supabase/server';
 import { isStudyMode, type StudyMode } from './study-modes';
+import { extractFileText } from './extract-text';
 
 export interface SavedStudy {
   id: number;
@@ -182,4 +183,37 @@ export async function getStudyWorkspace(id: number): Promise<StudyWorkspace | nu
     sources: ((srcs.data as StudySourceRow[] | null) ?? []).map(toSource),
     references: ((refs.data as StudyReferenceRow[] | null) ?? []).map(toReference),
   };
+}
+
+/**
+ * Backfill lazy do texto de fontes-arquivo: para fontes file sem `content` (ex.:
+ * enviadas antes da extração existir), baixa o binário do Storage, extrai o texto
+ * e persiste em study_sources.content — assim só processa uma vez. Retorna a lista
+ * com as fontes preenchidas. Falha de uma fonte não derruba as demais.
+ */
+export async function backfillFileSources(sources: StudySource[]): Promise<StudySource[]> {
+  const pending = sources.filter((s) => s.kind === 'file' && !s.content && s.storagePath);
+  if (pending.length === 0) return sources;
+
+  const supabase = createClient();
+  const filled = new Map<number, string>();
+
+  await Promise.all(
+    pending.map(async (s) => {
+      try {
+        const { data, error } = await supabase.storage.from('study-sources').download(s.storagePath!);
+        if (error || !data) return;
+        const bytes = new Uint8Array(await data.arrayBuffer());
+        const text = await extractFileText(bytes, s.mimeType, s.title);
+        if (!text) return;
+        await supabase.from('study_sources').update({ content: text }).eq('id', s.id);
+        filled.set(s.id, text);
+      } catch {
+        // ignora: a fonte segue sem texto e o chat sinaliza a falta de material.
+      }
+    }),
+  );
+
+  if (filled.size === 0) return sources;
+  return sources.map((s) => (filled.has(s.id) ? { ...s, content: filled.get(s.id)! } : s));
 }

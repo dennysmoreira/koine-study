@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/server';
 import { streamChatText } from '@/lib/gemini';
 import { getUserGeminiKey } from '@/lib/user-settings';
 import { buildChatContext, buildChatPrompt, STUDY_CHAT_SYSTEM } from '@/lib/study';
-import { getStudyWorkspace } from '@/lib/saved-studies';
+import { getStudyWorkspace, backfillFileSources } from '@/lib/saved-studies';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -70,9 +70,12 @@ export async function POST(req: Request): Promise<Response> {
   if (insErr) return bad(insErr.message, 500);
 
   // 5) Monta contexto (versículos citados + fontes) e prompt (histórico + mensagem).
+  //    Antes, garante o texto das fontes-arquivo (extrai PDFs enviados antes da
+  //    extração existir) para que o conteúdo delas chegue ao modelo.
+  const sources = await backfillFileSources(workspace.sources);
   const context = await buildChatContext(
     workspace.references,
-    workspace.sources,
+    sources,
     workspace.study.content,
   );
   const history = workspace.messages.slice(-MAX_HISTORY);
