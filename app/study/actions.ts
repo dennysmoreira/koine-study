@@ -390,6 +390,30 @@ export async function removeStudySource(id: number): Promise<{ ok: boolean; erro
   return { ok: true };
 }
 
+/** Renomeia um estudo (RLS own_studies garante propriedade). */
+export async function updateStudyTitle(id: number, title: string): Promise<{ ok: boolean; error?: string }> {
+  if (!Number.isInteger(id)) return { ok: false, error: 'Id inválido.' };
+  const clean = title?.trim();
+  if (!clean) return { ok: false, error: 'Informe um título.' };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+
+  // RLS (own_studies) garante que só o dono renomeia o próprio registro.
+  const { error } = await supabase
+    .from('saved_studies')
+    .update({ title: clean.slice(0, 120) })
+    .eq('id', id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/studies');
+  revalidatePath(`/studies/${id}`);
+  return { ok: true };
+}
+
 export async function deleteStudy(id: number): Promise<{ ok: boolean; error?: string }> {
   if (!Number.isInteger(id)) return { ok: false, error: 'Id inválido.' };
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getSavedStudies } from '@/lib/saved-studies';
 import { getStudyMode } from '@/lib/study-modes';
 import { NewStudyButton } from '@/components/NewStudyButton';
+import { StudyListItem } from '@/components/StudyListItem';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,26 +46,16 @@ export default async function StudiesPage() {
           {studies.map((s) => {
             const meta = getStudyMode(s.mode);
             return (
-              <li key={s.id}>
-                <Link
-                  href={`/studies/${s.id}`}
-                  className="flex items-center gap-4 rounded-xl border border-neutral-200 bg-white p-4 transition active:scale-[0.99] hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
-                >
-                  <span aria-hidden className="text-2xl">
-                    {meta.icon}
-                  </span>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-base font-medium">{s.title}</span>
-                    <span className="truncate text-sm text-neutral-500">
-                      {meta.label}
-                      {s.bookName && s.chapter ? ` · ${s.bookName} ${s.chapter}` : ''}
-                    </span>
-                  </span>
-                  <span className="ml-auto shrink-0 text-xs text-neutral-400">
-                    {dateFmt.format(new Date(s.createdAt))}
-                  </span>
-                </Link>
-              </li>
+              <StudyListItem
+                key={s.id}
+                study={{
+                  id: s.id,
+                  title: s.title,
+                  icon: meta.icon,
+                  subtitle: s.bookName && s.chapter ? `${s.bookName} ${s.chapter}` : null,
+                  dateLabel: dateFmt.format(new Date(s.createdAt)),
+                }}
+              />
             );
           })}
         </ul>
