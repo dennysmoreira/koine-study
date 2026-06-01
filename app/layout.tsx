@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { BottomNav } from '@/components/BottomNav';
 
 export const metadata: Metadata = {
   title: 'Koiné Study',
@@ -27,7 +28,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body className="min-h-dvh">{children}</body>
+      {/* pb reserva espaço para a BottomNav fixa (3.5rem) + safe-area do iOS. */}
+      <body className="min-h-dvh pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+        {children}
+        <BottomNav />
+      </body>
     </html>
   );
 }
