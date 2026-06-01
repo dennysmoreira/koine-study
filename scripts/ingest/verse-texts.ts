@@ -74,7 +74,6 @@ export async function backfillGreek(): Promise<void> {
       code: GRC_CODE,
       name: 'SBL Greek New Testament',
       language: 'grc',
-      license: 'CC BY 4.0',
       source_url: 'https://github.com/Clear-Bible/macula-greek',
       text_type: 'critical',
       is_original: true,
@@ -155,7 +154,6 @@ interface VersionSource {
   getbible: string; // chave na getbible.net (ex.: 'livre')
   name: string;
   language: string;
-  license: string;
   source_url: string;
   text_type: string;
   sort_order: number;
@@ -168,7 +166,6 @@ const VERSION_SOURCES: VersionSource[] = [
     getbible: 'livre',
     name: 'Bíblia Livre',
     language: 'pt',
-    license: 'CC BY 3.0 BR',
     source_url: 'https://getbible.net',
     text_type: 'translation',
     sort_order: 10,
@@ -178,7 +175,6 @@ const VERSION_SOURCES: VersionSource[] = [
     getbible: 'web',
     name: 'World English Bible',
     language: 'en',
-    license: 'Domínio Público',
     source_url: 'https://worldenglish.bible',
     text_type: 'translation',
     sort_order: 20,
@@ -270,7 +266,6 @@ async function ingestVersion(
       code: src.code,
       name: src.name,
       language: src.language,
-      license: src.license,
       source_url: src.source_url,
       text_type: src.text_type,
       is_original: false,
@@ -366,7 +361,6 @@ export async function ingestFreeVersions(codeFilter?: string): Promise<void> {
 //   "code": "pt-nvi",                  // identificador único (kebab-case)
 //   "name": "Nova Versão Internacional",
 //   "language": "pt",                  // pt | en | grc | ...
-//   "license": "© Biblica — uso licenciado",
 //   "source_url": "https://...",       // opcional
 //   "text_type": "translation",        // translation | critical | paraphrase ...
 //   "sort_order": 15,                  // ordem nas colunas (grego=0, livres=10/20)
@@ -389,7 +383,6 @@ interface VersionFile {
   code?: string;
   name?: string;
   language?: string;
-  license?: string;
   source_url?: string;
   text_type?: string;
   sort_order?: number;
@@ -432,7 +425,7 @@ export async function ingestVersionFromFile(filePath?: string): Promise<void> {
   }
 
   // valida metadados obrigatórios
-  const required: Array<keyof VersionFile> = ['code', 'name', 'language', 'license'];
+  const required: Array<keyof VersionFile> = ['code', 'name', 'language'];
   const missing = required.filter((k) => !parsed[k]);
   if (missing.length) throw new Error(`campos obrigatórios ausentes no arquivo: ${missing.join(', ')}`);
   if (!Array.isArray(parsed.verses) || parsed.verses.length === 0) {
@@ -455,7 +448,6 @@ export async function ingestVersionFromFile(filePath?: string): Promise<void> {
       code,
       name: parsed.name,
       language: parsed.language,
-      license: parsed.license,
       source_url: parsed.source_url ?? null,
       text_type: parsed.text_type ?? 'translation',
       is_original: false,

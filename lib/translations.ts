@@ -14,7 +14,6 @@ export interface Translation {
   code: string;
   name: string;
   language: string;
-  license: string;
   source_url: string | null;
   text_type: string | null;
   is_original: boolean;
@@ -42,7 +41,7 @@ export interface ParallelChapter {
 const TRANSLATIONS_CACHE = { revalidate: 60 * 60 * 24, tags: ['translations'] };
 
 const TRANSLATION_COLUMNS =
-  'code,name,language,license,source_url,text_type,is_original,sort_order';
+  'code,name,language,source_url,text_type,is_original,sort_order';
 
 async function fetchTranslations(): Promise<Translation[]> {
   const { data, error } = await supabase

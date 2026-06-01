@@ -97,7 +97,6 @@ export async function ingestHebrew(): Promise<void> {
       code: HEBREW_TRANSLATION_CODE,
       name: 'Westminster Leningrad Codex',
       language: 'hbo',
-      license: 'CC BY 4.0',
       source_url: 'https://github.com/openscriptures/morphhb',
       text_type: 'critical',
       is_original: true,

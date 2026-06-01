@@ -10,7 +10,7 @@
  * Fluxo:
  *   1) editora entrega .usfm/.sfm (sob licença)
  *   2) npm run ingest:convert-usfm -- --input=<dir|arquivo> --code=pt-nvi \
- *        --name="Nova Versão Internacional" --language=pt --license="© Biblica" \
+ *        --name="Nova Versão Internacional" --language=pt \
  *        --sort-order=15
  *   3) gera data/versions/pt-nvi.json
  *   4) npm run ingest:version-file -- --file=data/versions/pt-nvi.json
@@ -150,14 +150,13 @@ function arg(name: string): string | undefined {
 
 /**
  * Converte USFM(s) no formato data/versions/*.json. Os metadados da versão
- * (code/name/language/license...) vêm de flags, pois descrevem a LICENÇA — não
- * estão no arquivo de texto.
+ * (code/name/language...) vêm de flags, pois não estão no arquivo de texto.
  */
 export function convertUsfm(): void {
   const input = arg('input');
   if (!input) {
     throw new Error(
-      'informe a entrada: npm run ingest:convert-usfm -- --input=<dir|arquivo.usfm> --code=pt-nvi --name="..." --language=pt --license="..."',
+      'informe a entrada: npm run ingest:convert-usfm -- --input=<dir|arquivo.usfm> --code=pt-nvi --name="..." --language=pt',
     );
   }
   if (!existsSync(input)) throw new Error(`entrada não encontrada: ${input}`);
@@ -165,12 +164,10 @@ export function convertUsfm(): void {
   const code = arg('code');
   const name = arg('name');
   const language = arg('language');
-  const license = arg('license');
   const missing = [
     ['code', code],
     ['name', name],
     ['language', language],
-    ['license', license],
   ].filter(([, v]) => !v).map(([k]) => k);
   if (missing.length) throw new Error(`flags obrigatórias ausentes: ${missing.map((m) => `--${m}`).join(' ')}`);
 
@@ -197,7 +194,6 @@ export function convertUsfm(): void {
     code,
     name,
     language,
-    license,
     source_url: arg('source-url') ?? null,
     text_type: arg('text-type') ?? 'translation',
     sort_order: Number(arg('sort-order') ?? 50),

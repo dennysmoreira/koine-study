@@ -250,7 +250,7 @@ function VersionSheet({
               key={t.code}
               on={selectedSet.has(t.code)}
               title={t.name}
-              subtitle={`${t.language.toUpperCase()} · ${t.license}`}
+              subtitle={t.language.toUpperCase()}
               onClick={() => toggleOther(t.code)}
             />
           ))}
@@ -496,14 +496,13 @@ export function Comparator({
   );
 }
 
-// Atribuições das versões exibidas. Cada tradução credita nome, licença e fonte —
-// requisito das licenças abertas (CC BY) e boa prática para as demais.
+// Atribuições das versões exibidas. Cada tradução credita nome e fonte.
 function Attributions({ translations }: { translations: Translation[] }) {
   return (
     <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs leading-relaxed text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
       {translations.map((t) => (
         <p key={t.code}>
-          <span className="font-medium">{t.name}</span> — {t.license}
+          <span className="font-medium">{t.name}</span>
           {t.source_url && (
             <>
               {' · '}

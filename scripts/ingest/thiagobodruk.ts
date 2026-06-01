@@ -36,7 +36,6 @@ interface ThiagoVersion {
   file: string; // nome do arquivo em json/ (sem extensão)
   name: string;
   language: string;
-  license: string;
   sort_order: number;
 }
 
@@ -48,7 +47,6 @@ const THIAGO_VERSIONS: ThiagoVersion[] = [
     file: 'pt_aa',
     name: 'João Ferreira de Almeida Atualizada',
     language: 'pt',
-    license: '© Sociedade Bíblica do Brasil — uso conforme licença do detentor',
     sort_order: 11,
   },
   {
@@ -56,7 +54,6 @@ const THIAGO_VERSIONS: ThiagoVersion[] = [
     file: 'pt_nvi',
     name: 'Nova Versão Internacional',
     language: 'pt',
-    license: '© Biblica — uso conforme licença do detentor',
     sort_order: 12,
   },
   {
@@ -64,7 +61,6 @@ const THIAGO_VERSIONS: ThiagoVersion[] = [
     file: 'pt_acf',
     name: 'Almeida Corrigida Fiel',
     language: 'pt',
-    license: '© Sociedade Bíblica Trinitariana do Brasil — uso conforme licença do detentor',
     sort_order: 13,
   },
 ];
@@ -106,7 +102,6 @@ function buildPayload(books: SourceBook[], v: ThiagoVersion) {
     code: v.code,
     name: v.name,
     language: v.language,
-    license: v.license,
     source_url: 'https://github.com/thiagobodruk/bible',
     text_type: 'translation',
     sort_order: v.sort_order,
