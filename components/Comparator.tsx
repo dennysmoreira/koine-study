@@ -62,12 +62,23 @@ function NavSheet({
 }) {
   const router = useRouter();
   useEscapeToClose(onClose);
+  // Livro escolhido localmente: trocar o select NÃO navega. A navegação só
+  // acontece ao clicar em "Pesquisar" (ou ao escolher capítulo/versículo do
+  // livro já carregado). Capítulos e versículos só existem no cliente para o
+  // livro atualmente carregado, então as grades ficam ocultas até pesquisar.
+  const [selectedOsis, setSelectedOsis] = useState(current.osis_code);
+  const sameAsLoaded = selectedOsis === current.osis_code;
   const groups = new Map<string, Book[]>();
   for (const b of books) {
     const list = groups.get(b.testament) ?? [];
     list.push(b);
     groups.set(b.testament, list);
   }
+
+  const search = () => {
+    router.push(compareHref(selectedOsis, 1, codes));
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
@@ -78,57 +89,75 @@ function NavSheet({
         <label htmlFor="cmp-book" className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
           Livro
         </label>
-        <select
-          id="cmp-book"
-          value={current.osis_code}
-          onChange={(e) => router.push(compareHref(e.target.value, 1, codes))}
-          className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-800"
-        >
-          {[...groups.entries()].map(([testament, list]) => (
-            <optgroup key={testament} label={TESTAMENT_LABELS[testament] ?? testament}>
-              {list.map((b) => (
-                <option key={b.id} value={b.osis_code}>
-                  {b.name_pt}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-
-        <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Capítulo</p>
-        <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
-          {chapters.map((n) => (
-            <Link
-              key={n}
-              href={compareHref(current.osis_code, n, codes)}
-              onClick={onClose}
-              className={`flex h-9 items-center justify-center rounded-md text-sm transition ${
-                n === chapter
-                  ? 'bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100'
-                  : 'bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700'
-              }`}
-            >
-              {n}
-            </Link>
-          ))}
+        <div className="mt-1 flex gap-2">
+          <select
+            id="cmp-book"
+            value={selectedOsis}
+            onChange={(e) => setSelectedOsis(e.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-800"
+          >
+            {[...groups.entries()].map(([testament, list]) => (
+              <optgroup key={testament} label={TESTAMENT_LABELS[testament] ?? testament}>
+                {list.map((b) => (
+                  <option key={b.id} value={b.osis_code}>
+                    {b.name_pt}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={search}
+            className="shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
+          >
+            Pesquisar
+          </button>
         </div>
 
-        {rows.length > 0 && (
+        {sameAsLoaded ? (
           <>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Versículo</p>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Capítulo</p>
             <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
-              {rows.map((r) => (
-                <button
-                  key={r.verse}
-                  type="button"
-                  onClick={() => onVerse(r.verse)}
-                  className="flex h-9 items-center justify-center rounded-md bg-neutral-100 text-sm transition hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+              {chapters.map((n) => (
+                <Link
+                  key={n}
+                  href={compareHref(current.osis_code, n, codes)}
+                  onClick={onClose}
+                  className={`flex h-9 items-center justify-center rounded-md text-sm transition ${
+                    n === chapter
+                      ? 'bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100'
+                      : 'bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700'
+                  }`}
                 >
-                  {r.verse}
-                </button>
+                  {n}
+                </Link>
               ))}
             </div>
+
+            {rows.length > 0 && (
+              <>
+                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Versículo</p>
+                <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
+                  {rows.map((r) => (
+                    <button
+                      key={r.verse}
+                      type="button"
+                      onClick={() => onVerse(r.verse)}
+                      className="flex h-9 items-center justify-center rounded-md bg-neutral-100 text-sm transition hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                    >
+                      {r.verse}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </>
+        ) : (
+          <p className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+            Clique em <span className="font-semibold">Pesquisar</span> para abrir o livro selecionado e então
+            escolher capítulo e versículo.
+          </p>
         )}
       </div>
     </div>
