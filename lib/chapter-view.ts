@@ -2,6 +2,7 @@ import 'server-only';
 import { getChapter, type Book, type Token } from './corpus';
 import { getHebrewChapter, type HebrewWord } from './hebrew';
 import { getParallelChapter, type Translation } from './translations';
+import { groupByDisplay, originalChapterWindow } from './versification';
 
 // ── Vista unificada do capítulo ────────────────────────────────────────────
 //
@@ -70,17 +71,35 @@ export async function getChapterView(
     for (const v of greek.verses) tokensByVerse.set(v.verse, v.tokens);
   }
 
-  const hebrew = original?.language === 'hbo' ? await getHebrewChapter(osis, chapter) : null;
-  const hebrewByVerse = hebrew ? new Map<number, HebrewWord[]>() : null;
-  if (hebrew && hebrewByVerse) {
-    for (const v of hebrew.verses) hebrewByVerse.set(v.verse, v.words);
+  // O interlinear hebraico vive na numeração do TM (org), que diverge do eixo de
+  // display: títulos de Salmo são numerados e fronteiras de capítulo movidas trazem
+  // versos de capítulos org vizinhos para este capítulo de display. Buscamos a
+  // janela [ch-1, ch, ch+1] e reagrupamos cada palavra no verso de display via
+  // originalToDisplay (título → display verse 0). No NT a coluna é grega e este
+  // bloco nem roda.
+  let hebrewByDisplay: Map<number, HebrewWord[]> | null = null;
+  if (original?.language === 'hbo') {
+    const orgChapters = originalChapterWindow(chapter);
+    const fetched = await Promise.all(orgChapters.map((c) => getHebrewChapter(osis, c)));
+    const words: Array<{ chapter: number; verse: number; word: HebrewWord }> = [];
+    orgChapters.forEach((c, i) => {
+      const hc = fetched[i];
+      if (!hc) return;
+      for (const v of hc.verses) for (const w of v.words) words.push({ chapter: c, verse: v.verse, word: w });
+    });
+    hebrewByDisplay = new Map();
+    for (const [dv, items] of groupByDisplay(osis, chapter, words, (x) => x)) {
+      hebrewByDisplay.set(dv, items.map((x) => x.word));
+    }
   }
+  const hebrewForRow = (displayVerse: number): HebrewWord[] | null =>
+    hebrewByDisplay?.get(displayVerse) ?? null;
 
   const rows: ChapterViewRow[] = parallel.rows.map((r) => ({
     verse: r.verse,
     ref: r.ref,
     tokens: greek ? tokensByVerse.get(r.verse) ?? null : null,
-    hebrewWords: hebrewByVerse ? hebrewByVerse.get(r.verse) ?? null : null,
+    hebrewWords: hebrewForRow(r.verse),
     texts: r.texts,
   }));
 

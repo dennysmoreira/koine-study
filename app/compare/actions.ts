@@ -3,6 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { getLexiconEntries, getBookByOsis, getBooks, type LexiconEntry } from '@/lib/corpus';
 import { getTranslations } from '@/lib/translations';
+import { originalToDisplay, originalChapterWindow } from '@/lib/versification';
 
 export interface BookOption {
   osis: string;
@@ -42,10 +43,14 @@ export async function getBookChapters(osis: string): Promise<number[]> {
   return ((data ?? []) as number[]).slice().sort((a, b) => a - b);
 }
 
-// Versículos de um capítulo (ordenados). Filtra pela versão ORIGINAL do
-// testamento do livro (grc no NT, hbo no AT) para ter uma linha por versículo —
-// a lista fica completa sem multiplicar por versão nem estourar o teto do
-// PostgREST. Retorna [] se o livro não existir ou não houver original.
+// Versículos de um capítulo (ordenados, eixo de display protestante). Filtra pela
+// versão ORIGINAL do testamento do livro (grc no NT, hbo no AT) para ter uma linha
+// por versículo — a lista fica completa sem multiplicar por versão nem estourar o
+// teto do PostgREST. O original vive na numeração canônica da fonte (TM no AT), que
+// diverge do eixo de display: títulos de Salmo numerados e fronteiras de capítulo
+// movidas. Buscamos a janela [ch-1, ch, ch+1] e traduzimos cada verso org → display
+// via originalToDisplay, mantendo só os que caem neste capítulo e descartando
+// títulos (display verse 0). Retorna [] se o livro não existir ou não houver original.
 export async function getChapterVerses(osis: string, chapter: number): Promise<number[]> {
   const book = await getBookByOsis(osis);
   if (!book) return [];
@@ -58,11 +63,18 @@ export async function getChapterVerses(osis: string, chapter: number): Promise<n
 
   const { data, error } = await supabase
     .from('verse_texts')
-    .select('verse')
+    .select('chapter,verse')
     .eq('book_id', book.id)
-    .eq('chapter', chapter)
+    .in('chapter', originalChapterWindow(chapter))
     .eq('translation_code', originalCode)
+    .order('chapter')
     .order('verse');
   if (error) throw new Error(`getChapterVerses: ${error.message}`);
-  return ((data ?? []) as { verse: number }[]).map((r) => r.verse);
+
+  const seen = new Set<number>();
+  for (const r of (data ?? []) as { chapter: number; verse: number }[]) {
+    const dv = originalToDisplay(book.osis_code, r.chapter, r.verse);
+    if (dv.chapter === chapter && dv.verse > 0) seen.add(dv.verse);
+  }
+  return [...seen].sort((a, b) => a - b);
 }

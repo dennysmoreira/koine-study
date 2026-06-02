@@ -622,7 +622,7 @@ export function Comparator({
                     )}
                   </button>
                 )}
-                {selectMode && (
+                {selectMode && row.verse > 0 && (
                   <button
                     type="button"
                     onClick={() => toggleVerse(row.verse)}
@@ -656,7 +656,7 @@ export function Comparator({
                       </span>
                       <p className="flex items-start gap-1.5 text-[15px] leading-relaxed">
                         <span className="mt-0.5 select-none text-xs font-semibold text-neutral-400">
-                          {row.verse}
+                          {row.verse === 0 ? 'tít.' : row.verse}
                         </span>
                         {showTokens ? (
                           <GreekVerse

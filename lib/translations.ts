@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache';
 import { supabase } from './supabase';
 import { getBookByOsis, type Book } from './corpus';
+import { originalToDisplay, originalChapterWindow } from './versification';
 
 // ── Comparador de traduções ───────────────────────────────────────────────
 //
@@ -118,13 +119,20 @@ async function fetchParallelChapter(
     .map((c) => byCode.get(c))
     .filter((t): t is Translation => Boolean(t));
 
+  // A coluna original vive na numeração canônica da fonte (TM/`org` no AT), que
+  // diverge do eixo de display (eng/protestante) em dezenas de capítulos — não só
+  // por título de Salmo, mas por fronteiras de capítulo movidas, que trazem versos
+  // de capítulos org vizinhos para este capítulo de display. Por isso buscamos o
+  // original na janela [ch-1, ch, ch+1] e traduzimos cada verso com originalToDisplay.
+  // As traduções já estão no eixo de display, então só precisam do próprio capítulo.
   const [{ data, error }, chapters] = await Promise.all([
     supabase
       .from('verse_texts')
       .select('translation_code,ref,chapter,verse,text')
       .eq('book_id', book.id)
-      .eq('chapter', chapter)
+      .in('chapter', originalChapterWindow(chapter))
       .in('translation_code', selected.map((t) => t.code))
+      .order('chapter')
       .order('verse'),
     fetchChapterNumbers(book.id),
   ]);
@@ -132,12 +140,12 @@ async function fetchParallelChapter(
 
   const rows = (data ?? []) as VerseTextRow[];
 
-  // Agrupa por número de versículo (chave de alinhamento entre versões). Cada
-  // versão pode trazer um `ref` ligeiramente diferente para o mesmo versículo
-  // (diferenças de versificação), então guardamos o ref por código e escolhemos
-  // um ref canônico de forma determinística depois — nunca "o primeiro que
-  // chegou" (a ordem das linhas do PostgREST dentro de um mesmo versículo não é
-  // garantida).
+  // Agrupa por número de versículo de DISPLAY (chave de alinhamento entre
+  // versões). Cada versão pode trazer um `ref` ligeiramente diferente para o
+  // mesmo versículo (diferenças de versificação), então guardamos o ref por
+  // código e escolhemos um ref canônico de forma determinística depois — nunca
+  // "o primeiro que chegou" (a ordem das linhas do PostgREST dentro de um mesmo
+  // versículo não é garantida).
   interface Grouped {
     chapter: number;
     verse: number;
@@ -146,22 +154,40 @@ async function fetchParallelChapter(
   }
   const byVerse = new Map<number, Grouped>();
   for (const r of rows) {
-    let g = byVerse.get(r.verse);
+    let displayVerse: number;
+    if (r.translation_code === originalForBook) {
+      // Coluna original: traduz a coordenada org → display. Versos que caem em
+      // outro capítulo de display (fronteira movida) são descartados; título → 0.
+      const dv = originalToDisplay(book.osis_code, r.chapter, r.verse);
+      if (dv.chapter !== chapter) continue;
+      displayVerse = dv.verse;
+    } else {
+      // Tradução: já no eixo de display; a janela traz capítulos vizinhos que aqui
+      // não interessam.
+      if (r.chapter !== chapter) continue;
+      displayVerse = r.verse;
+    }
+    let g = byVerse.get(displayVerse);
     if (!g) {
-      g = { chapter: r.chapter, verse: r.verse, texts: {}, refByCode: {} };
+      g = { chapter, verse: displayVerse, texts: {}, refByCode: {} };
       // inicializa todas as versões como ausentes para colunas consistentes
       for (const t of selected) g.texts[t.code] = null;
-      byVerse.set(r.verse, g);
+      byVerse.set(displayVerse, g);
     }
-    g.texts[r.translation_code] = r.text;
-    g.refByCode[r.translation_code] = r.ref;
+    // Merge de versificação (título de 2 versos, ou versos org fundidos numa linha
+    // de display) concatena na ordem de leitura — daí o order by (chapter, verse).
+    const prev = g.texts[r.translation_code];
+    g.texts[r.translation_code] = prev ? `${prev} ${r.text}` : r.text;
+    if (!g.refByCode[r.translation_code]) g.refByCode[r.translation_code] = r.ref;
   }
 
-  // ref canônico: prioriza a versão de maior precedência presente no versículo.
-  // `selected` já vem ordenado por sort_order (original = 0 vence), então a
-  // primeira que tiver ref define a chave estável da linha.
+  // ref canônico: as traduções estão no eixo de display, então seu ref serve
+  // direto. O ref do original vive na numeração org (que pode estar adiantada ou
+  // em outro capítulo), então nunca é canônico — quando só há original, montamos o
+  // ref a partir do display verse.
   const canonicalRef = (g: Grouped): string => {
     for (const t of selected) {
+      if (t.code === originalForBook) continue;
       const ref = g.refByCode[t.code];
       if (ref) return ref;
     }
