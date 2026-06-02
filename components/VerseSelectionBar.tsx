@@ -123,7 +123,7 @@ export function VerseSelectionBar({
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
+      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
           <span className="text-sm font-medium">
             {count} versículo{count > 1 ? 's' : ''} selecionado{count > 1 ? 's' : ''}
