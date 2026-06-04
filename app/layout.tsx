@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import { BottomNav } from '@/components/BottomNav';
+import { AppShell } from '@/components/AppShell';
 
 export const metadata: Metadata = {
   title: 'Koiné Study',
@@ -28,10 +28,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      {/* pb reserva espaço para a BottomNav fixa (3.5rem) + safe-area do iOS. */}
-      <body className="min-h-dvh pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
-        {children}
-        <BottomNav />
+      {/* O AppShell reserva o espaço da BottomNav só onde ela aparece. */}
+      <body className="min-h-dvh">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

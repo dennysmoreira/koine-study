@@ -1,12 +1,16 @@
 import Link from 'next/link';
 import { getAnnotations } from '@/lib/annotations-server';
 import { AnnotationsList } from '@/components/AnnotationsList';
+import { getShareTokens } from '@/app/share/actions';
 
 // As anotações são dados do usuário (RLS) e mudam a cada edição/remoção; sem cache.
 export const dynamic = 'force-dynamic';
 
 export default async function AnnotationsPage() {
   const annotations = await getAnnotations();
+  // Tokens de link já existentes (mapa id → token), em UMA query, para cada
+  // ShareButton da lista refletir o estado certo sem regenerar o snapshot.
+  const shareTokens = await getShareTokens('annotation', annotations.map((a) => a.id));
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 pb-24">
@@ -31,7 +35,7 @@ export default async function AnnotationsPage() {
             , selecione um ou mais versículos e toque em “✍️ Anotar”.
           </p>
         ) : (
-          <AnnotationsList annotations={annotations} />
+          <AnnotationsList annotations={annotations} shareTokens={shareTokens} />
         )}
       </div>
     </main>

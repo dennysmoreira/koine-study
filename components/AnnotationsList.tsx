@@ -13,12 +13,20 @@ import { annotationLabel, type Annotation, type CrossRef } from '@/lib/annotatio
 import { updateAnnotation, deleteAnnotation } from '@/app/annotations/actions';
 import { CrossRefPicker } from './CrossRefPicker';
 import { CrossRefChips } from './CrossRefChips';
+import { ShareButton } from './ShareButton';
 
 function compareHref(a: Annotation): string {
   return `/compare/${a.osis}/${a.chapter}?goto=${a.verseStart}`;
 }
 
-export function AnnotationsList({ annotations }: { annotations: Annotation[] }) {
+export function AnnotationsList({
+  annotations,
+  shareTokens = {},
+}: {
+  annotations: Annotation[];
+  // Mapa id da anotação → token de link público existente (seeda o ShareButton).
+  shareTokens?: Record<number, string>;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState<number | null>(null);
@@ -144,7 +152,7 @@ export function AnnotationsList({ annotations }: { annotations: Annotation[] }) 
                     <CrossRefChips refs={a.crossRefs} />
                   </div>
                 )}
-                <div className="mt-2 flex gap-3 text-xs">
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                   <button
                     type="button"
                     onClick={() => startEdit(a)}
@@ -158,6 +166,7 @@ export function AnnotationsList({ annotations }: { annotations: Annotation[] }) 
                   >
                     Abrir no comparador
                   </Link>
+                  <ShareButton kind="annotation" id={a.id} initialToken={shareTokens[a.id]} compact />
                   <button
                     type="button"
                     onClick={() => remove(a.id)}

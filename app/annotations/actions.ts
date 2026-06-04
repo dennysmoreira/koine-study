@@ -176,6 +176,10 @@ export async function deleteAnnotation(id: number): Promise<AnnotationResult> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
 
+  // Revoga o link público (snapshot é independente da fonte, não cascateia):
+  // apagar a anotação não deve deixar um link compartilhado vivo. RLS isola o dono.
+  await supabase.from('shared_snapshots').delete().eq('kind', 'annotation').eq('source_id', id);
+
   // RLS (own_annotations) garante que só o dono apaga; o ON DELETE CASCADE em
   // study_sources.annotation_id remove os vínculos a estudos automaticamente.
   const { error } = await supabase.from('annotations').delete().eq('id', id);

@@ -59,6 +59,20 @@ export async function getAnnotations(): Promise<Annotation[]> {
   return (data as AnnotationRow[]).map(toAnnotation);
 }
 
+/** Carrega uma anotação por id (ou null se não existir / não for do usuário, via RLS). */
+export async function getAnnotation(id: number): Promise<Annotation | null> {
+  if (!Number.isInteger(id)) return null;
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase.from('annotations').select(SELECT).eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  return toAnnotation(data as AnnotationRow);
+}
+
 /**
  * Anotações de um capítulo (para marcar os versículos anotados no comparador).
  * Ordenadas por verse_start. Vazio se anônimo.

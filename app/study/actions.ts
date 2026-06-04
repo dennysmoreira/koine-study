@@ -495,6 +495,10 @@ export async function deleteStudy(id: number): Promise<{ ok: boolean; error?: st
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
 
+  // Revoga o link público antes (snapshot é independente da fonte, não cascateia):
+  // deletar o estudo não deve deixar um link compartilhado vivo. RLS isola o dono.
+  await supabase.from('shared_snapshots').delete().eq('kind', 'study').eq('source_id', id);
+
   // RLS (own_studies) garante que só o dono apaga o próprio registro.
   const { error } = await supabase.from('saved_studies').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };

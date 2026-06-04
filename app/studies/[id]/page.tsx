@@ -5,6 +5,8 @@ import { getBooks } from '@/lib/corpus';
 import { getStudyMode } from '@/lib/study-modes';
 import { DeleteStudyButton } from '@/components/DeleteStudyButton';
 import { StudyWorkspace } from '@/components/StudyWorkspace';
+import { ShareButton } from '@/components/ShareButton';
+import { getShareToken } from '@/app/share/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +28,11 @@ export default async function StudyDetailPage({
   const id = Number(params.id);
   if (!Number.isInteger(id)) notFound();
 
-  const [workspace, allBooks] = await Promise.all([getStudyWorkspace(id), getBooks()]);
+  const [workspace, allBooks, shareToken] = await Promise.all([
+    getStudyWorkspace(id),
+    getBooks(),
+    getShareToken('study', id),
+  ]);
   if (!workspace) notFound();
 
   const { study, messages, sources, references } = workspace;
@@ -48,6 +54,10 @@ export default async function StudyDetailPage({
         </Link>
         <DeleteStudyButton id={study.id} />
       </header>
+
+      <div className="mb-4">
+        <ShareButton kind="study" id={study.id} initialToken={shareToken} />
+      </div>
 
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
         <span aria-hidden>{meta.icon}</span>

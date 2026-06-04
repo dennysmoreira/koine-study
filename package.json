@@ -43,6 +43,7 @@
     "typecheck:scripts": "tsc -p tsconfig.scripts.json"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.5.1",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.0",
     "csv-parse": "^5.5.6",

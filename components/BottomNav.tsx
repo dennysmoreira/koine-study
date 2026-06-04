@@ -43,6 +43,15 @@ function matches(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * A navegação fixa some no login (gated) e nas páginas públicas de
+ * compartilhamento (/share/*) — read-only para quem não tem conta. Exportada
+ * para o AppShell decidir, no mesmo lugar, se reserva o espaço da nav.
+ */
+export function isAppChromeHidden(pathname: string): boolean {
+  return pathname === '/login' || pathname === '/share' || pathname.startsWith('/share/');
+}
+
 export function BottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -62,8 +71,7 @@ export function BottomNav() {
     return () => document.removeEventListener('keydown', onKey);
   }, [moreOpen]);
 
-  // Não aparece no login: as seções são gated e não há para onde navegar ainda.
-  if (pathname === '/login') return null;
+  if (isAppChromeHidden(pathname)) return null;
 
   const moreActive = MORE.some((item) => matches(pathname, item.href));
 
