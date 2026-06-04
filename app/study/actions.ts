@@ -164,39 +164,6 @@ async function assertOwnsStudy(
   return !!data;
 }
 
-/** Adiciona uma referência bíblica (versículo da base) ao estudo. */
-export async function addStudyReference(
-  studyId: number,
-  ref: { ref: string; osis: string; bookName: string; chapter: number; verse: number },
-): Promise<{ ok: boolean; error?: string }> {
-  if (!Number.isInteger(studyId)) return { ok: false, error: 'Id inválido.' };
-  if (!ref.ref || !ref.osis) return { ok: false, error: 'Referência inválida.' };
-
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
-  if (!(await assertOwnsStudy(supabase, studyId))) return { ok: false, error: 'Estudo não encontrado.' };
-
-  const { error } = await supabase.from('study_references').upsert(
-    {
-      study_id: studyId,
-      user_id: user.id,
-      ref: ref.ref,
-      osis: ref.osis,
-      book_name: ref.bookName,
-      chapter: ref.chapter,
-      verse: ref.verse,
-    },
-    { onConflict: 'study_id,ref', ignoreDuplicates: true },
-  );
-  if (error) return { ok: false, error: error.message };
-
-  revalidatePath(`/studies/${studyId}`);
-  return { ok: true };
-}
-
 export interface ReferenceInput {
   ref: string;
   osis: string;
