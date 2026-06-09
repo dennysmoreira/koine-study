@@ -42,3 +42,23 @@ Bíblia Livro por Livro*; Carlos Osvaldo C. Pinto, *Fundamentos para Exegese do 
 - **Sem crítica textual real.** O app não tem aparato crítico; o método não pede ao modelo "fazer"
   crítica textual (evita alucinação de variantes) — foca no que é fundamentável.
 - **Aderência ao copyright:** método sim, texto não. Documentado aqui como decisão permanente.
+
+## Atualização 2026-06-09 — aprofundamento do método + reafirmação do copyright
+
+Diante do pedido de "absorver conhecimento de uma biblioteca teológica (PDFs) para melhorar a
+exegese, sem expor nada", a decisão foi **aprofundar a METODOLOGIA** (ideias/procedimentos, de
+domínio comum na disciplina), **NÃO ingerir o texto das obras**.
+
+- **Por quê:** copyright protege a *expressão*, não *ideias/métodos/fatos* (Lei 9.610; 17 USC §102b).
+  Ingerir texto de obras protegidas num índice/RAG — mesmo "oculto" — faria o modelo regurgitar
+  expressão protegida nas respostas ao usuário, o que **é distribuição derivada** ("não expor
+  visualmente" não basta). Já o método é livre e não exige os PDFs: é conhecimento estabelecido.
+- **Implementação:** novo bloco único `EXEGETICAL_METHOD` em `lib/study.ts`, reutilizado por
+  `buildStudySystem` (estudo one-shot) e por `STUDY_CHAT_SYSTEM` (chat). Sete princípios generalizados:
+  (1) gênero primeiro; (2) contexto manda; (3) estrutura/análise de discurso (conectivos gregos,
+  paralelismo hebraico); (4) gramática que muda o sentido (só a partir da morfologia fornecida);
+  (5) palavras pelo uso, não etimologia (falácias de Barr: etimologismo, transferência ilegítima de
+  totalidade, anacronismo); (6) teologia do particular ao todo; (7) honestidade epistêmica.
+- **Uso pessoal do conteúdo protegido:** se o usuário quiser o conteúdo de um livro específico, o
+  caminho legítimo é anexá-lo como **fonte pessoal** de um estudo seu (upload já suportado) — uso
+  privado, nunca embutido/redistribuído pelo app.
