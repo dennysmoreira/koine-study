@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline — Hermeneus</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        padding: 2rem;
+        text-align: center;
+        background: #0a0a0a;
+        color: #e5e5e5;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+      .mark { font-size: 4rem; line-height: 1; color: #f59e0b; font-family: Georgia, serif; font-weight: 700; }
+      h1 { font-size: 1.25rem; font-weight: 600; margin: 0; }
+      p { margin: 0; max-width: 22rem; color: #a3a3a3; font-size: 0.95rem; line-height: 1.5; }
+      button {
+        margin-top: 0.5rem;
+        border: 0;
+        border-radius: 0.6rem;
+        background: #f59e0b;
+        color: #451a03;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 0.7rem 1.4rem;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mark" aria-hidden="true">&#937;</div>
+    <h1>Você está offline</h1>
+    <p>Não foi possível carregar esta página sem conexão. Capítulos que você já abriu continuam disponíveis offline.</p>
+    <button type="button" onclick="location.reload()">Tentar novamente</button>
+  </body>
+</html>
