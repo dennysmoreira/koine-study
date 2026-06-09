@@ -51,7 +51,7 @@ export default async function HomePage() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <header className="mb-8 flex items-start justify-between gap-2 sm:gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">Hermeneus</h1>
           <p className="text-sm text-neutral-500">Leia, compare e estude o texto bíblico no original.</p>
         </div>

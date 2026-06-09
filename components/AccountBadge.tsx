@@ -21,7 +21,7 @@ export async function AccountBadge() {
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
       <span
         className="hidden min-w-0 truncate text-sm text-neutral-500 sm:block sm:max-w-[12rem]"
         title={user.email ?? ''}
