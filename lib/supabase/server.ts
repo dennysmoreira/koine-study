@@ -15,7 +15,7 @@ if (!url || !anonKey) {
 
 // Cliente Supabase com sessão por cookie, para Server Components / Route Handlers /
 // Server Actions. Respeita RLS: anônimo lê o corpus público; usuário autenticado
-// (auth.uid()) acessa os próprios dados (srs_cards, profiles…).
+// (auth.uid()) acessa os próprios dados (saved_studies, annotations, profiles…).
 // A anon key é pública por design — nunca usar service_role aqui.
 export function createClient() {
   const cookieStore = cookies();

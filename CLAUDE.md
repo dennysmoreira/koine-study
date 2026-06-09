@@ -8,8 +8,8 @@ lidos só quando você for mexer naquela área. Não re-explore o que já está 
 
 Plataforma pessoal de estudo de **grego koiné + hebraico bíblico** para exegese. Next.js
 (App Router) PWA + Supabase (Postgres + Auth + RLS). Mobile-first. Arquitetura **data-first**:
-um corpus etiquetado alimenta todos os modos (leitor/comparador, vocabulário SRS, parsing,
-gramática). Repo separado do workspace principal.
+um corpus etiquetado alimenta o leitor/comparador, o dicionário e os estudos com IA
+(workspace conversacional, anotações e compartilhamento). Repo separado do workspace principal.
 
 ## Comandos
 
@@ -51,15 +51,14 @@ de leitura de corpus/traduções são embrulhadas em `unstable_cache` (ver ADR-0
 | Decoder OSHM | `lib/hebrew-morph.ts` | **client-safe** (importado por componente client — ver ADR-0003) |
 | Decoder Robinson | `scripts/ingest/morph-decoder.ts` | códigos gregos V-PAI-3S -> features |
 | Léxico/dicionário | `lib/dictionary.ts`, `morph-labels.ts`, `transliterate.ts` | busca e rótulos PT |
-| SRS / vocab | `lib/srs.ts` (FSRS), `vocab.ts`, `study-modes.ts` | flashcards, repetição espaçada |
-| Parsing / lições | `lib/parsing.ts`, `lessons.ts`, `trail.ts`, `alphabet.ts` | quiz e trilha de gramática |
-| Progresso / estudos | `lib/progress.ts`, `gamification.ts`, `saved-studies.ts`, `study.ts` | dados de usuário (RLS) |
+| Estudos (IA) | `lib/saved-studies.ts`, `study.ts`, `study-modes.ts`, `shared-studies.ts`, `refs.ts` | workspace conversacional, citações, snapshots de compartilhamento (RLS) |
+| Anotações | `lib/annotations.ts`, `annotations-server.ts` | observações por versículo + referências cruzadas (RLS) |
 | Tradução LLM | `lib/gemini.ts` | provider de glosas EN->PT |
 | Clients Supabase | `lib/supabase.ts`, `lib/supabase/` | anon (leitura), service_role (ETL), ssr (auth) |
 
 **UI** — `components/Comparator.tsx` (comparador), `components/greek/{GreekVerse,TokenSheet}.tsx`,
-`components/hebrew/{HebrewVerse,HebrewWordSheet}.tsx`. Rotas em `app/` (compare, read, vocab,
-parsing, lessons, trail, alphabet, dictionary, studies). Server Components + `app/*/actions.ts`.
+`components/hebrew/{HebrewVerse,HebrewWordSheet}.tsx`. Rotas em `app/` (compare, dictionary,
+studies, annotations, share, settings). Server Components + `app/*/actions.ts`.
 
 **Schema** — `supabase/migrations/`. Tabelas: `books`, `lemmas`, `verses`, `tokens`,
 `hebrew_words`, `translations`, `verse_texts`, léxicos (`lexicon_entries`...), `saved_studies`
@@ -102,8 +101,6 @@ Use as ferramentas `preview_*` (snapshot/eval/screenshot) — não peça verific
   Ex.: `feat(comparador): interlinear hebraico clicavel com morfologia OSHM`.
 - **Nunca commitar sem pedido explícito** — no máximo sugerir a mensagem.
 - Arquivos novos em **UTF-8 + LF** (forçar LF; o Windows pode salvar CRLF).
-- **Gramática/lições:** tabelas de paradigma sempre com exemplos traduzidos em **PT**, não
-  formas gregas soltas.
 - Toda função de leitura nova que for cacheada segue a regra da armadilha #1.
 
 ## ADRs

@@ -3,7 +3,7 @@
  * Uso: tsx scripts/ingest/verify-lexicon.ts
  *
  * Confere: (1) contagem de lexicon_entries; (2) o join por Strong's de θεός
- * (G2316) retorna a entrada LSJ; (3) contagem de srs_cards (progresso preservado).
+ * (G2316) retorna a entrada LSJ; (3) cobertura de lemas do corpus.
  * Read-only — nenhuma escrita.
  */
 
@@ -42,14 +42,7 @@ async function main() {
     console.log('  ⚠️  sem entrada LSJ para θεός');
   }
 
-  // 3. progresso do SRS preservado
-  const { count: srsCount, error: e3 } = await client
-    .from('srs_cards')
-    .select('*', { count: 'exact', head: true });
-  if (e3) throw new Error(`srs_cards count: ${e3.message}`);
-  console.log(`\nsrs_cards: ${srsCount} cards`);
-
-  // 4. cobertura: lemas distintos com ao menos uma entrada de léxico
+  // 3. cobertura: lemas distintos com ao menos uma entrada de léxico
   const { count: lemmaCount, error: e4 } = await client
     .from('lemmas')
     .select('*', { count: 'exact', head: true });

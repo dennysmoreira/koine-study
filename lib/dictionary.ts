@@ -1,5 +1,4 @@
 import { unstable_cache } from 'next/cache';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { getLexiconEntries, type LexiconEntry } from './corpus';
 
@@ -147,17 +146,3 @@ async function fetchDictionaryEntry(lemmaId: number): Promise<DictEntry | null> 
  * Cacheada (corpus imutável); chaveada por lemmaId via unstable_cache.
  */
 export const getDictionaryEntry = unstable_cache(fetchDictionaryEntry, ['dictionary:entry'], CORPUS_CACHE);
-
-/**
- * Indica se um lema já está no baralho do usuário. O `client` deve ser o cliente
- * server (cookie) — a RLS escopa srs_cards ao auth.uid(), por isso não filtramos
- * user_id manualmente. Compartilhado entre a página de detalhe e a action.
- */
-export async function isInDeck(client: SupabaseClient, lemmaId: number): Promise<boolean> {
-  const { data } = await client
-    .from('srs_cards')
-    .select('lemma_id')
-    .eq('lemma_id', lemmaId)
-    .maybeSingle();
-  return Boolean(data);
-}

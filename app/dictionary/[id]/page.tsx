@@ -1,9 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { getDictionaryEntry, isInDeck } from '@/lib/dictionary';
+import { getDictionaryEntry } from '@/lib/dictionary';
 import { transliterate } from '@/lib/transliterate';
-import { AddToDeckButton } from '@/components/AddToDeckButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,14 +19,7 @@ export default async function DictionaryEntryPage({ params }: { params: { id: st
   const entry = await getDictionaryEntry(lemmaId);
   if (!entry) notFound();
 
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Vocabulário (SRS) é grego-only; o baralho só faz sentido para lemas do NT.
   const isHebrew = entry.language === 'hbo';
-  const inDeck = user && !isHebrew ? await isInDeck(supabase, lemmaId) : false;
   const bdb = entry.bdb_def_pt ?? entry.bdb_def;
 
   return (
@@ -66,12 +57,6 @@ export default async function DictionaryEntryPage({ params }: { params: { id: st
           {entry.strongs && <span>Strong&apos;s {entry.strongs}</span>}
         </div>
       </div>
-
-      {!isHebrew && (
-        <div className="mt-5">
-          <AddToDeckButton lemmaId={lemmaId} loggedIn={Boolean(user)} initiallyInDeck={inDeck} />
-        </div>
-      )}
 
       {isHebrew && bdb && (
         <section className="mt-8">
