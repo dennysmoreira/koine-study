@@ -80,7 +80,7 @@ export function AnnotationsList({
             <div className="mb-1 flex items-center justify-between gap-3">
               <Link
                 href={compareHref(a)}
-                className="text-sm font-semibold text-amber-600 transition hover:underline dark:text-amber-400"
+                className="text-sm font-semibold text-amber-700 transition hover:underline dark:text-amber-400"
               >
                 {annotationLabel(a)}
               </Link>
@@ -135,7 +135,7 @@ export function AnnotationsList({
                     type="button"
                     onClick={() => saveEdit(a.id)}
                     disabled={pending}
-                    className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                    className="min-h-[44px] rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
                   >
                     {pending ? 'Salvando…' : 'Salvar'}
                   </button>
@@ -156,7 +156,7 @@ export function AnnotationsList({
                   <button
                     type="button"
                     onClick={() => startEdit(a)}
-                    className="font-medium text-amber-600 transition hover:underline dark:text-amber-400"
+                    className="font-medium text-amber-700 transition hover:underline dark:text-amber-400"
                   >
                     Editar
                   </button>

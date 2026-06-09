@@ -81,7 +81,13 @@ export function ShareButton({ kind, id, initialToken, compact }: ShareButtonProp
           disabled={pending}
           className={`${triggerClass} disabled:opacity-60`}
         >
-          {pending ? 'Compartilhando…' : token ? '🔗 Link' : '🔗 Compartilhar'}
+          {pending ? (
+            'Compartilhando…'
+          ) : (
+            <>
+              <span aria-hidden>🔗</span> {token ? 'Link' : 'Compartilhar'}
+            </>
+          )}
         </button>
         {error && <span className="text-xs text-red-600">{error}</span>}
       </>
@@ -96,7 +102,7 @@ export function ShareButton({ kind, id, initialToken, compact }: ShareButtonProp
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Fechar"
-          className="text-neutral-400 transition hover:text-neutral-600 dark:hover:text-neutral-300"
+          className="flex size-7 items-center justify-center rounded text-neutral-500 transition hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
         >
           ✕
         </button>
@@ -113,7 +119,7 @@ export function ShareButton({ kind, id, initialToken, compact }: ShareButtonProp
         <button
           type="button"
           onClick={copy}
-          className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-600"
+          className="min-h-[44px] shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950 transition hover:bg-amber-400"
         >
           {copied ? 'Copiado!' : 'Copiar'}
         </button>
@@ -124,7 +130,7 @@ export function ShareButton({ kind, id, initialToken, compact }: ShareButtonProp
           href={token ? `/share/${token}/pdf` : '#'}
           className="font-medium text-neutral-600 transition hover:underline dark:text-neutral-300"
         >
-          ⬇️ Baixar PDF
+          <span aria-hidden>⬇️</span> Baixar PDF
         </a>
         <button
           type="button"
@@ -144,7 +150,7 @@ export function ShareButton({ kind, id, initialToken, compact }: ShareButtonProp
         </button>
       </div>
 
-      <p className="mt-2 text-[11px] text-neutral-400">
+      <p className="mt-2 text-[11px] text-neutral-500 dark:text-neutral-400">
         Quem tiver o link vê uma cópia congelada deste {kind === 'study' ? 'estudo' : 'anotação'}. Edições futuras só
         aparecem se você atualizar o snapshot.
       </p>

@@ -180,12 +180,12 @@ export function StudyReferencesPanel({
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         Versículos citados ({references.length})
       </h2>
 
       {references.length === 0 ? (
-        <p className="text-xs text-neutral-400">Nenhum versículo citado ainda.</p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">Nenhum versículo citado ainda.</p>
       ) : (
         <ul className="space-y-1">
           {references.map((r) => (
@@ -201,7 +201,7 @@ export function StudyReferencesPanel({
                 onClick={() => remove(r.id)}
                 disabled={pending}
                 aria-label={`Remover ${r.bookName} ${r.chapter}:${r.verse}`}
-                className="shrink-0 text-neutral-400 transition hover:text-red-600 disabled:opacity-50"
+                className="flex size-7 shrink-0 items-center justify-center rounded text-neutral-500 transition hover:text-red-600 disabled:opacity-50 dark:text-neutral-400"
               >
                 ✕
               </button>
@@ -247,14 +247,14 @@ export function StudyReferencesPanel({
           {chapter != null && (
             <>
               {loadingVerses ? (
-                <p className="text-[11px] text-neutral-400">Carregando versículos…</p>
+                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Carregando versículos…</p>
               ) : verses.length === 0 ? (
-                <p className="text-[11px] text-neutral-400">Nenhum versículo neste capítulo.</p>
+                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Nenhum versículo neste capítulo.</p>
               ) : (
                 <>
                   {/* Atalho de intervalo: marca um trecho contíguo de uma vez. */}
                   <div className="flex items-end gap-2">
-                    <label className="flex flex-1 flex-col gap-1 text-[11px] text-neutral-400">
+                    <label className="flex flex-1 flex-col gap-1 text-[11px] text-neutral-500 dark:text-neutral-400">
                       De
                       <input
                         type="number"
@@ -264,7 +264,7 @@ export function StudyReferencesPanel({
                         className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                       />
                     </label>
-                    <label className="flex flex-1 flex-col gap-1 text-[11px] text-neutral-400">
+                    <label className="flex flex-1 flex-col gap-1 text-[11px] text-neutral-500 dark:text-neutral-400">
                       Até
                       <input
                         type="number"
@@ -283,7 +283,7 @@ export function StudyReferencesPanel({
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                  <div className="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
                     <span>{selected.size} selecionado{selected.size === 1 ? '' : 's'}</span>
                     <span className="flex gap-2">
                       <button type="button" onClick={selectAll} className="hover:text-neutral-600 dark:hover:text-neutral-300">
@@ -314,8 +314,8 @@ export function StudyReferencesPanel({
                           aria-label={`Versículo ${v}`}
                           className={
                             on
-                              ? 'min-w-[2rem] rounded-md bg-amber-500 px-2 py-1 text-xs font-semibold text-white'
-                              : 'min-w-[2rem] rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800'
+                              ? 'flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-amber-500 px-2 text-sm font-semibold text-amber-950'
+                              : 'flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-neutral-300 px-2 text-sm text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800'
                           }
                         >
                           {v}
@@ -333,7 +333,7 @@ export function StudyReferencesPanel({
               type="button"
               onClick={citar}
               disabled={pending || selected.size === 0}
-              className="rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+              className="min-h-[44px] rounded-md bg-amber-500 px-4 py-1 text-xs font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50"
             >
               {pending ? 'Citando…' : `Citar${selected.size > 0 ? ` (${selected.size})` : ''}`}
             </button>

@@ -22,7 +22,7 @@ const SOURCE_ICON: Record<string, string> = { text: '📄', file: '📎', annota
 function StudyView({ s }: { s: StudySnapshot }) {
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <span aria-hidden>{s.modeIcon}</span>
         <span>{s.modeLabel}</span>
         {s.reference && (
@@ -51,7 +51,7 @@ function StudyView({ s }: { s: StudySnapshot }) {
 
       {s.references.length > 0 && (
         <section className="mb-6">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Passagens citadas</h2>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Passagens citadas</h2>
           <div className="flex flex-wrap gap-2">
             {s.references.map((r) => (
               <span
@@ -67,7 +67,7 @@ function StudyView({ s }: { s: StudySnapshot }) {
 
       {s.sources.length > 0 && (
         <section className="mb-6">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Fontes</h2>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Fontes</h2>
           <ul className="space-y-1 text-sm text-neutral-600 dark:text-neutral-300">
             {s.sources.map((src, i) => (
               <li key={`${src.kind}-${i}`} className="flex items-center gap-2">
@@ -81,7 +81,7 @@ function StudyView({ s }: { s: StudySnapshot }) {
 
       {s.messages.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Conversa</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Conversa</h2>
           {s.messages.map((m, i) => (
             <div
               key={i}
@@ -103,7 +103,7 @@ function StudyView({ s }: { s: StudySnapshot }) {
 function AnnotationView({ s }: { s: AnnotationSnapshot }) {
   return (
     <>
-      <div className="mb-2 flex items-center gap-2 text-xs text-neutral-400">
+      <div className="mb-2 flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <span aria-hidden>📝</span>
         <span>Anotação</span>
       </div>
@@ -116,7 +116,7 @@ function AnnotationView({ s }: { s: AnnotationSnapshot }) {
 
       {s.crossRefs.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Referências relacionadas</h2>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Referências relacionadas</h2>
           <div className="flex flex-wrap gap-2">
             {s.crossRefs.map((r) => (
               <span
@@ -147,15 +147,15 @@ export default async function SharePage({ params }: { params: { token: string } 
         </Link>
         <a
           href={`/share/${params.token}/pdf`}
-          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          className="inline-flex min-h-[44px] items-center rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
         >
-          ⬇️ Baixar PDF
+          <span aria-hidden>⬇️</span>&nbsp;Baixar PDF
         </a>
       </header>
 
       {snapshot.kind === 'study' ? <StudyView s={snapshot} /> : <AnnotationView s={snapshot} />}
 
-      <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs text-neutral-400 dark:border-neutral-800">
+      <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs text-neutral-500 dark:text-neutral-400 dark:border-neutral-800">
         Compartilhado de <span className="font-medium">koiné</span> · snapshot de {dateFmt.format(new Date(snapshotAt))}
       </footer>
     </main>

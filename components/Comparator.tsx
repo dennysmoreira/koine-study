@@ -150,7 +150,7 @@ function NavSheet({
       <div className="relative max-h-[80dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-8 shadow-xl dark:bg-neutral-900">
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
 
-        <label htmlFor="cmp-book" className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+        <label htmlFor="cmp-book" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Livro
         </label>
         <select
@@ -170,9 +170,9 @@ function NavSheet({
           ))}
         </select>
 
-        <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-400">Capítulo</p>
+        <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Capítulo</p>
         {loadingChapters ? (
-          <p className="mt-2 text-sm text-neutral-400">Carregando capítulos…</p>
+          <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">Carregando capítulos…</p>
         ) : (
           <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
             {chapterList.map((n) => (
@@ -195,19 +195,19 @@ function NavSheet({
         {selectedChapter != null && (
           <>
             <div className="mt-4 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Versículo</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Versículo</p>
               {!isLoadedChapter(selectedOsis, selectedChapter) && (
                 <button
                   type="button"
                   onClick={goToChapterTop}
-                  className="text-xs font-medium text-amber-600 hover:underline dark:text-amber-400"
+                  className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
                 >
                   Abrir capítulo →
                 </button>
               )}
             </div>
             {loadingVerses ? (
-              <p className="mt-2 text-sm text-neutral-400">Carregando versículos…</p>
+              <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">Carregando versículos…</p>
             ) : (
               <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-10">
                 {verseList.map((v) => (
@@ -253,13 +253,13 @@ function VersionRow({
     >
       <span className="flex min-w-0 flex-col">
         <span className="truncate text-sm font-medium">{title}</span>
-        <span className="truncate text-xs text-neutral-400">{subtitle}</span>
+        <span className="truncate text-xs text-neutral-500 dark:text-neutral-400">{subtitle}</span>
       </span>
       <span
         aria-hidden
         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
           on
-            ? 'border-amber-500 bg-amber-500 text-white'
+            ? 'border-amber-500 bg-amber-500 text-amber-950'
             : 'border-neutral-300 text-transparent dark:border-neutral-600'
         }`}
       >
@@ -331,7 +331,7 @@ function VersionSheet({
       <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/40" />
       <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-8 shadow-xl dark:bg-neutral-900">
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Versões</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Versões</h2>
         <div className="mt-3 flex flex-col gap-2">
           {originals.length > 0 && (
             <VersionRow
@@ -352,7 +352,7 @@ function VersionSheet({
           ))}
         </div>
         {all.length <= 1 && (
-          <p className="mt-4 text-xs leading-relaxed text-neutral-400">
+          <p className="mt-4 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
             Só o texto grego original está disponível por enquanto. Novas versões aparecerão
             aqui automaticamente quando forem licenciadas.
           </p>
@@ -536,10 +536,10 @@ export function Comparator({
           <button
             type="button"
             onClick={() => setStudyOpen(true)}
-            className="rounded-md px-2 py-1 font-medium text-amber-600 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/30"
+            className="rounded-md px-2 py-1 font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/30"
             aria-label="Estudo com IA"
           >
-            ✨ Estudo
+            <span aria-hidden>✨</span> Estudo
           </button>
           <button
             type="button"
@@ -583,7 +583,7 @@ export function Comparator({
         {/* Cabeçalho de colunas (só desktop): nomes das versões alinhados às colunas. */}
         <div className="mb-2 hidden sm:grid sm:gap-4" style={gridStyle}>
           {translations.map((t) => (
-            <div key={t.code} className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+            <div key={t.code} className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
               {t.name}
             </div>
           ))}
@@ -616,7 +616,7 @@ export function Comparator({
                   >
                     <span aria-hidden>📝</span>
                     {verseAnnotations.length > 1 && (
-                      <span className="ml-0.5 align-super text-[10px] font-semibold text-amber-600">
+                      <span className="ml-0.5 align-super text-[10px] font-semibold text-amber-700">
                         {verseAnnotations.length}
                       </span>
                     )}
@@ -628,9 +628,9 @@ export function Comparator({
                     onClick={() => toggleVerse(row.verse)}
                     aria-pressed={isSelected}
                     aria-label={`Selecionar versículo ${row.verse}`}
-                    className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs transition ${
+                    className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded border text-xs transition ${
                       isSelected
-                        ? 'border-amber-500 bg-amber-500 text-white'
+                        ? 'border-amber-500 bg-amber-500 text-amber-950'
                         : 'border-neutral-300 text-transparent hover:border-amber-400 dark:border-neutral-600'
                     }`}
                   >
@@ -651,11 +651,11 @@ export function Comparator({
                   return (
                     <div key={t.code} className="mb-2 last:mb-0 sm:mb-0">
                       {/* Rótulo da versão por bloco (só mobile, pois empilha). */}
-                      <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-neutral-400 sm:hidden">
+                      <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 sm:hidden">
                         {t.name}
                       </span>
                       <p className="flex items-start gap-1.5 text-[15px] leading-relaxed">
-                        <span className="mt-0.5 select-none text-xs font-semibold text-neutral-400">
+                        <span className="mt-0.5 select-none text-xs font-semibold text-neutral-500 dark:text-neutral-400">
                           {row.verse === 0 ? 'tít.' : row.verse}
                         </span>
                         {showTokens ? (
@@ -761,7 +761,7 @@ export function Comparator({
 // Atribuições das versões exibidas. Cada tradução credita nome e fonte.
 function Attributions({ translations }: { translations: Translation[] }) {
   return (
-    <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs leading-relaxed text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
+    <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs leading-relaxed text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
       {translations.map((t) => (
         <p key={t.code}>
           <span className="font-medium">{t.name}</span>

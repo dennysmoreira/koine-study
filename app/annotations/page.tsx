@@ -29,7 +29,7 @@ export default async function AnnotationsPage() {
         {annotations.length === 0 ? (
           <p className="rounded-xl border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
             Você ainda não tem anotações. Abra o{' '}
-            <Link href="/compare" className="font-medium text-amber-600 hover:underline dark:text-amber-400">
+            <Link href="/compare" className="font-medium text-amber-700 hover:underline dark:text-amber-400">
               comparador
             </Link>
             , selecione um ou mais versículos e toque em “✍️ Anotar”.

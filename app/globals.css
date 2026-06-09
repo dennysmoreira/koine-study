@@ -13,3 +13,45 @@ html {
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
 }
+
+/* Foco de teclado visível e consistente em TODOS os elementos interativos
+   (WCAG 2.4.7). Centralizado aqui para não depender de cada botão declarar o
+   próprio anel — :focus-visible só aparece na navegação por teclado, não no
+   clique do mouse. */
+@layer base {
+  a:focus-visible,
+  button:focus-visible,
+  [role='button']:focus-visible,
+  [tabindex]:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    @apply outline-none ring-2 ring-amber-500 ring-offset-2 ring-offset-neutral-50 dark:ring-offset-neutral-950;
+  }
+
+  /* Remove o atraso de ~300ms do toque em mobile nos elementos interativos,
+     mantendo o pinch-zoom (diferente de touch-action: none). */
+  a,
+  button,
+  [role='button'],
+  input,
+  textarea,
+  select,
+  label {
+    touch-action: manipulation;
+  }
+}
+
+/* Respeita quem pede menos movimento (SO/navegador): neutraliza animações e
+   transições, inclusive o realce de versículo. Acessibilidade (WCAG 2.3.3) e
+   conforto vestibular. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

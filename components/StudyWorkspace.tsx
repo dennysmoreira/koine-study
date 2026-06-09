@@ -144,10 +144,14 @@ export function StudyWorkspace({
       <section className="flex min-h-[60dvh] flex-col">
         <div
           ref={threadRef}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label="Conversa do estudo"
           className="flex-1 space-y-4 overflow-y-auto rounded-lg bg-neutral-50 px-4 py-4 dark:bg-neutral-800/40"
         >
           {messages.length === 0 && !streaming && (
-            <p className="py-8 text-center text-sm text-neutral-400">
+            <p className="py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
               Comece a conversa. Cite versículos e anexe fontes para fundamentar as respostas.
             </p>
           )}
@@ -177,7 +181,7 @@ export function StudyWorkspace({
             <button
               type="button"
               onClick={stop}
-              className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              className="min-h-[44px] rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
             >
               Parar
             </button>
@@ -186,7 +190,7 @@ export function StudyWorkspace({
               type="button"
               onClick={send}
               disabled={!draft.trim()}
-              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+              className="min-h-[44px] rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50"
             >
               Enviar
             </button>
@@ -201,7 +205,7 @@ export function StudyWorkspace({
         <StudySourcesPanel studyId={studyId} sources={sources} />
 
         {!hasContext && (
-          <p className="rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-400 dark:border-neutral-700">
+          <p className="rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
             Sem material de apoio, a IA responde só com conhecimento geral. Cite versículos ou anexe fontes para respostas fundamentadas.
           </p>
         )}
@@ -217,7 +221,7 @@ function MessageBubble({ role, content }: { role: 'user' | 'assistant'; content:
       <div
         className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
           isUser
-            ? 'bg-amber-500 text-white'
+            ? 'bg-amber-500 text-amber-950'
             : 'bg-white text-neutral-800 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
         }`}
       >

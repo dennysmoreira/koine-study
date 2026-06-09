@@ -102,12 +102,12 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         Fontes ({sources.length})
       </h2>
 
       {sources.length === 0 ? (
-        <p className="text-xs text-neutral-400">Nenhuma fonte anexada ainda.</p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">Nenhuma fonte anexada ainda.</p>
       ) : (
         <ul className="space-y-1">
           {sources.map((s) => (
@@ -124,7 +124,7 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
                 onClick={() => remove(s.id)}
                 disabled={pending}
                 aria-label={`Remover ${s.title}`}
-                className="shrink-0 text-neutral-400 transition hover:text-red-600 disabled:opacity-50"
+                className="flex size-7 shrink-0 items-center justify-center rounded text-neutral-500 transition hover:text-red-600 disabled:opacity-50 dark:text-neutral-400"
               >
                 ✕
               </button>
@@ -162,9 +162,9 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
       {mode === 'annotation' && (
         <div className="mt-2 space-y-2">
           {annotations === null ? (
-            <p className="py-2 text-center text-xs text-neutral-400">Carregando…</p>
+            <p className="py-2 text-center text-xs text-neutral-500 dark:text-neutral-400">Carregando…</p>
           ) : annotations.length === 0 ? (
-            <p className="py-2 text-center text-xs text-neutral-400">
+            <p className="py-2 text-center text-xs text-neutral-500 dark:text-neutral-400">
               Você ainda não tem anotações. Crie uma no comparador.
             </p>
           ) : (
@@ -210,7 +210,7 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
               type="button"
               onClick={submitText}
               disabled={pending}
-              className="rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+              className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
             >
               {pending ? 'Salvando…' : 'Salvar'}
             </button>
@@ -228,13 +228,13 @@ export function StudySourcesPanel({ studyId, sources }: { studyId: number; sourc
             type="file"
             className="w-full text-xs text-neutral-600 file:mr-2 file:rounded-md file:border-0 file:bg-neutral-200 file:px-2 file:py-1 file:text-xs dark:text-neutral-300 dark:file:bg-neutral-700"
           />
-          <p className="text-[11px] text-neutral-400">Máx. 10 MB. O arquivo fica privado ao seu usuário.</p>
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Máx. 10 MB. O arquivo fica privado ao seu usuário.</p>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={submitFile}
               disabled={pending}
-              className="rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+              className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
             >
               {pending ? 'Enviando…' : 'Enviar'}
             </button>

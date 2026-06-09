@@ -141,7 +141,7 @@ export function CrossRefPicker({ onAdd, onCancel }: { onAdd: (ref: CrossRef) => 
           type="button"
           onClick={confirm}
           disabled={pending || osis === '' || chapter == null || verseStart == null}
-          className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+          className="min-h-[44px] rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50"
         >
           Adicionar
         </button>

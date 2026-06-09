@@ -132,7 +132,7 @@ export function VerseSelectionBar({
             <button
               type="button"
               onClick={onClear}
-              className="rounded-lg px-3 py-2 text-sm text-neutral-500 transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              className="min-h-[44px] rounded-lg px-3 py-2 text-sm text-neutral-500 transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
             >
               Limpar
             </button>
@@ -144,15 +144,15 @@ export function VerseSelectionBar({
               }}
               disabled={pending}
               aria-pressed={composing}
-              className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              className="min-h-[44px] rounded-lg bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-200 disabled:opacity-60 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
             >
-              ✍️ Anotar
+              <span aria-hidden>✍️</span> Anotar
             </button>
             <button
               type="button"
               onClick={openPicker}
               disabled={pending}
-              className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              className="min-h-[44px] rounded-lg bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-200 disabled:opacity-60 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
             >
               Adicionar a um estudo
             </button>
@@ -160,9 +160,9 @@ export function VerseSelectionBar({
               type="button"
               onClick={() => createWith(true)}
               disabled={pending}
-              className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+              className="min-h-[44px] rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
             >
-              ✨ Explicar com IA
+              <span aria-hidden>✨</span> Explicar com IA
             </button>
           </div>
         </div>
@@ -221,7 +221,7 @@ export function VerseSelectionBar({
                 type="button"
                 onClick={saveAnnotation}
                 disabled={pending}
-                className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                className="min-h-[44px] rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
               >
                 {pending ? 'Salvando…' : 'Salvar anotação'}
               </button>

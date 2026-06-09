@@ -17,8 +17,8 @@ export const viewport: Viewport = {
   themeColor: '#0a0a0a',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Não travar zoom: o usuário precisa dar pinch-zoom para ler grego/hebraico
+  // miúdo e o interlinear (WCAG 1.4.4 — não desabilitar zoom).
 };
 
 export default function RootLayout({
