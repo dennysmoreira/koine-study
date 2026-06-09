@@ -24,6 +24,31 @@ export interface Occurrence {
   ref: string;
   /** forma flexionada naquela ocorrência (surface). */
   surface: string;
+  /** trecho de contexto: texto do versículo numa tradução PT (null se ausente). */
+  text: string | null;
+}
+
+// Tradução usada para o trecho de contexto (KWIC) na concordância.
+const SNIPPET_CODE = 'pt-nvi';
+
+// Anexa o texto do versículo (contexto) a cada ocorrência, em UMA query batelada
+// por `ref`. Refs sem texto na tradução padrão ficam com text=null (sem snippet).
+async function withSnippets(occ: Occurrence[]): Promise<Occurrence[]> {
+  if (occ.length === 0) return occ;
+  const refs = [...new Set(occ.map((o) => o.ref))];
+  const byRef = new Map<string, string>();
+  // Chunked: um `.in()` com ~300 refs estoura o tamanho da URL do PostgREST (a
+  // lista vai no query string). Lotes pequenos mantêm cada requisição curta.
+  const CHUNK = 80;
+  for (let i = 0; i < refs.length; i += CHUNK) {
+    const { data } = await supabase
+      .from('verse_texts')
+      .select('ref,text')
+      .eq('translation_code', SNIPPET_CODE)
+      .in('ref', refs.slice(i, i + CHUNK));
+    for (const r of (data ?? []) as { ref: string; text: string }[]) byRef.set(r.ref, r.text);
+  }
+  return occ.map((o) => ({ ...o, text: byRef.get(o.ref) ?? null }));
 }
 
 export interface Concordance {
@@ -86,8 +111,9 @@ async function fetchGreek(lemmaId: number, frequency: number): Promise<Concordan
     verse: r.verses.verse,
     ref: r.verses.ref,
     surface: r.surface,
+    text: null,
   }));
-  return { total: frequency || occurrences.length, occurrences, truncated };
+  return { total: frequency || occurrences.length, occurrences: await withSnippets(occurrences), truncated };
 }
 
 // Hebraico: hebrew_words.morphemes @> [{ g: strongs }] — no jsonb cru a chave do
@@ -136,9 +162,10 @@ async function fetchHebrew(strongs: string): Promise<Concordance> {
       verse: dv.verse,
       ref: `${osis} ${dv.chapter}:${dv.verse}`,
       surface: r.surface,
+      text: null,
     });
   }
-  return { total: count ?? occurrences.length, occurrences, truncated };
+  return { total: count ?? occurrences.length, occurrences: await withSnippets(occurrences), truncated };
 }
 
 /**

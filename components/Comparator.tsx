@@ -15,6 +15,7 @@ import { StudyModal } from './StudyModal';
 import { VerseSelectionBar } from './VerseSelectionBar';
 import { AnnotationSheet } from './AnnotationSheet';
 import { CrossRefsSheet } from './CrossRefsSheet';
+import { ReaderHelp } from './ReaderHelp';
 import type { ReferenceInput } from '@/app/study/actions';
 import type { Annotation } from '@/lib/annotations';
 import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
@@ -536,6 +537,7 @@ export function Comparator({
           </svg>
         </button>
         <div className="flex items-center gap-3 whitespace-nowrap text-sm">
+          <ReaderHelp />
           <button
             type="button"
             onClick={() => setStudyOpen(true)}
@@ -667,7 +669,7 @@ export function Comparator({
                             type="button"
                             onClick={() => setCrossRefVerse(row.verse)}
                             aria-label={`Referências cruzadas do versículo ${row.verse}`}
-                            className="mt-0.5 select-none text-xs font-semibold text-neutral-500 transition hover:text-amber-700 dark:text-neutral-400 dark:hover:text-amber-400"
+                            className="mt-0.5 cursor-pointer select-none text-xs font-semibold text-neutral-500 underline decoration-neutral-300 decoration-dotted underline-offset-2 transition hover:text-amber-700 dark:text-neutral-400 dark:decoration-neutral-600 dark:hover:text-amber-400"
                           >
                             {row.verse}
                           </button>

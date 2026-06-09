@@ -74,17 +74,24 @@ export default async function OccurrencesPage({ params }: { params: { id: string
                   <li key={`${o.chapter}:${o.verse}-${i}`}>
                     <Link
                       href={`/compare/${o.osis}/${o.chapter}?goto=${o.verse}`}
-                      className="flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2 transition hover:bg-neutral-100 dark:hover:bg-neutral-800/60"
+                      className="block rounded-lg px-3 py-2 transition hover:bg-neutral-100 dark:hover:bg-neutral-800/60"
                     >
-                      <span className="shrink-0 text-sm font-medium tabular-nums text-amber-700 dark:text-amber-400">
-                        {o.chapter}:{o.verse}
-                      </span>
-                      <span
-                        className={`min-w-0 flex-1 truncate ${isHebrew ? 'font-hebrew text-right' : 'font-greek'}`}
-                        dir={isHebrew ? 'rtl' : undefined}
-                      >
-                        {o.surface}
-                      </span>
+                      <div className="flex items-baseline gap-3">
+                        <span className="shrink-0 text-sm font-medium tabular-nums text-amber-700 dark:text-amber-400">
+                          {o.chapter}:{o.verse}
+                        </span>
+                        <span
+                          className={`min-w-0 flex-1 truncate text-sm ${isHebrew ? 'font-hebrew text-right' : 'font-greek'}`}
+                          dir={isHebrew ? 'rtl' : undefined}
+                        >
+                          {o.surface}
+                        </span>
+                      </div>
+                      {o.text && (
+                        <p className="mt-1 line-clamp-2 text-sm leading-snug text-neutral-600 dark:text-neutral-300">
+                          {o.text}
+                        </p>
+                      )}
                     </Link>
                   </li>
                 ))}

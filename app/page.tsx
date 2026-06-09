@@ -1,5 +1,7 @@
 import { AccountBadge } from '@/components/AccountBadge';
 import { ActivityCard, type Activity } from '@/components/ActivityCard';
+import { ResumeReading } from '@/components/ResumeReading';
+import { getBooks } from '@/lib/corpus';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +44,10 @@ const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const books = await getBooks();
+  const bookNames: Record<string, string> = Object.fromEntries(books.map((b) => [b.osis_code, b.name_pt]));
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <header className="mb-8 flex items-start justify-between gap-2 sm:gap-4">
@@ -52,6 +57,8 @@ export default function HomePage() {
         </div>
         <AccountBadge />
       </header>
+
+      <ResumeReading bookNames={bookNames} />
 
       <div className="flex flex-col gap-8">
         {SECTIONS.map((section) => (
