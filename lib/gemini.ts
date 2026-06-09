@@ -25,11 +25,18 @@ interface Attempt {
 // Modelos Gemini, em ordem de preferência. Cada modelo tem cota diária (RPD)
 // INDEPENDENTE no free tier, então listar vários multiplica o teto diário efetivo
 // da chave: quando o 1º estoura (HTTP 429), o failover desce para o próximo.
-// Ordem: qualidade de ponta (3.5-flash) → cota generosa (3.1-flash-lite, ~500/dia)
-// → 2.5 como rede. Os 2.0 foram desativados pelo Google em 2026-06-01.
+//
+// ATENÇÃO (acentuação PT-BR): `gemini-3.5-flash` derruba acentos do português de
+// forma NÃO-DETERMINÍSTICA (mesma entrada às vezes volta "oracao"/"coracao"). Como
+// o failover só avalia o status HTTP (200) e não a qualidade do texto, aceitar o
+// 3.5-flash primeiro fazia estudos saírem sem acento de forma intermitente. Por
+// isso ele foi DEMOVIDO para último (rede de segurança quando o resto esgota a
+// cota). A fila lidera com modelos que preservam acento de forma confiável:
+//  - 3.1-flash-lite: acentos confiáveis + cota generosa (~500/dia)
+//  - 2.5-flash / 2.5-flash-lite: acentos confiáveis, boa qualidade
 const GEMINI_MODELS = splitEnv(
   process.env.GEMINI_GEN_MODELS,
-  'gemini-3.5-flash,gemini-3.1-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite',
+  'gemini-3.1-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite,gemini-3.5-flash',
 );
 
 // Modelos Groq (free tier generoso, API OpenAI-compat). 70b para qualidade, 8b

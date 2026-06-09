@@ -149,7 +149,7 @@ function NavSheet({
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
       <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="relative max-h-[80dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-8 shadow-xl dark:bg-neutral-900">
+      <div className="relative max-h-[80dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
 
         <label htmlFor="cmp-book" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
@@ -331,7 +331,7 @@ function VersionSheet({
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
       <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-8 shadow-xl dark:bg-neutral-900">
+      <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
         <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Versões</h2>
         <div className="mt-3 flex flex-col gap-2">
@@ -394,6 +394,7 @@ export function Comparator({
   // Versículo cujas referências cruzadas (TSK) estão abertas (toque no número).
   const [crossRefVerse, setCrossRefVerse] = useState<number | null>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   // Índice versículo → anotações que o cobrem (faixa verse_start..verse_end), para
   // marcar no comparador e abrir a folha de leitura ao tocar no marcador. Memoizado
@@ -429,6 +430,44 @@ export function Comparator({
   }, [book.osis_code, number]);
 
   const codes = translations.map((t) => t.code);
+  const codesKey = codes.join(',');
+
+  // Memória das versões escolhidas. Persiste a seleção SÓ quando ela é explícita na
+  // URL (?v) — ou seja, resultado de uma escolha do usuário. Entradas sem ?v (padrão
+  // do servidor) NÃO sobrescrevem a preferência, senão o padrão apagaria o salvo.
+  useEffect(() => {
+    if (!searchParams.get('v')) return;
+    try {
+      window.localStorage.setItem('koine:compare:versions', JSON.stringify(codes));
+    } catch {
+      // localStorage indisponível (modo privado) — apenas não persiste.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codesKey]);
+
+  // Reaplica a preferência salva quando a URL NÃO traz versões: troca para a última
+  // seleção do usuário em vez de cair no padrão do servidor. Uma vez por montagem;
+  // após o replace a URL passa a ter ?v e o guard impede repetir/entrar em loop.
+  const appliedVersionPref = useRef(false);
+  useEffect(() => {
+    if (appliedVersionPref.current || searchParams.get('v')) return;
+    appliedVersionPref.current = true;
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem('koine:compare:versions') ?? 'null') as unknown;
+      if (!Array.isArray(parsed)) return;
+      // mantém só códigos conhecidos do catálogo (versão removida é descartada).
+      const saved = parsed.filter(
+        (c): c is string => typeof c === 'string' && allTranslations.some((t) => t.code === c),
+      );
+      if (saved.length > 0 && saved.join(',') !== codesKey) {
+        router.replace(compareHref(book.osis_code, number, saved));
+      }
+    } catch {
+      // localStorage/JSON inválido — mantém o padrão.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const original = translations.find((t) => t.is_original) ?? null;
   const originalCode = original?.code ?? null;
   // Língua da coluna original define o tratamento tipográfico: grego (LTR,
@@ -521,23 +560,60 @@ export function Comparator({
 
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-neutral-200 bg-neutral-50/90 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
-        <Link href="/" className="text-sm text-neutral-500 hover:underline">
-          ← Início
-        </Link>
-        <button
-          type="button"
-          onClick={() => setNavOpen(true)}
-          className="flex items-center gap-1 text-sm font-semibold transition hover:text-neutral-600 dark:hover:text-neutral-300"
-          aria-label="Selecionar livro, capítulo e versículo"
-        >
-          {book.name_pt} {number}
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-neutral-400" aria-hidden="true">
-            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clipRule="evenodd" />
-          </svg>
-        </button>
-        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm">
-          <ReaderHelp />
+      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/90 px-4 py-2.5 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
+        {/* Linha 1 — navegação: voltar + navegador de capítulo centralizado (‹ título ›). */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <Link href="/" className="justify-self-start text-sm text-neutral-500 transition hover:text-neutral-700 dark:hover:text-neutral-300">
+            ← Início
+          </Link>
+
+          <div className="flex items-center gap-0.5 justify-self-center">
+            {prev != null ? (
+              <Link
+                href={compareHref(book.osis_code, prev, codes)}
+                aria-label={`Capítulo anterior (${prev})`}
+                className="flex size-9 items-center justify-center rounded-md text-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              >
+                ‹
+              </Link>
+            ) : (
+              <span aria-hidden className="flex size-9 items-center justify-center text-lg text-neutral-300 dark:text-neutral-700">
+                ‹
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setNavOpen(true)}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-sm font-semibold transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              aria-label="Selecionar livro, capítulo e versículo"
+            >
+              {book.name_pt} {number}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-neutral-400" aria-hidden="true">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {next != null ? (
+              <Link
+                href={compareHref(book.osis_code, next, codes)}
+                aria-label={`Próximo capítulo (${next})`}
+                className="flex size-9 items-center justify-center rounded-md text-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              >
+                ›
+              </Link>
+            ) : (
+              <span aria-hidden className="flex size-9 items-center justify-center text-lg text-neutral-300 dark:text-neutral-700">
+                ›
+              </span>
+            )}
+          </div>
+
+          <span aria-hidden /> {/* coluna vazia: equilibra o "← Início" para centralizar o navegador */}
+        </div>
+
+        {/* Linha 2 — ações da leitura. */}
+        <div className="mt-1.5 flex items-center gap-1 text-sm">
           <button
             type="button"
             onClick={() => setStudyOpen(true)}
@@ -567,20 +643,9 @@ export function Comparator({
           >
             Versões ({translations.length})
           </button>
-          {prev != null ? (
-            <Link href={compareHref(book.osis_code, prev, codes)} className="text-neutral-500 hover:underline">
-              ‹ {prev}
-            </Link>
-          ) : (
-            <span className="text-neutral-300 dark:text-neutral-700">‹</span>
-          )}
-          {next != null ? (
-            <Link href={compareHref(book.osis_code, next, codes)} className="text-neutral-500 hover:underline">
-              {next} ›
-            </Link>
-          ) : (
-            <span className="text-neutral-300 dark:text-neutral-700">›</span>
-          )}
+          <div className="ml-auto">
+            <ReaderHelp />
+          </div>
         </div>
       </header>
 

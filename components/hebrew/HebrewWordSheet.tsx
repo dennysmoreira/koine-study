@@ -29,7 +29,7 @@ export function HebrewWordSheet({ word, onClose }: { word: HebrewWord; onClose: 
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
       />
-      <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-8 shadow-xl dark:bg-neutral-900">
+      <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
 
         <div className="flex items-baseline justify-between gap-3">

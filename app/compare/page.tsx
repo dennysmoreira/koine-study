@@ -14,19 +14,27 @@ export default function CompareIndexPage() {
   const router = useRouter();
 
   useEffect(() => {
-    let target = FALLBACK;
+    let path = FALLBACK;
+    let query = '';
     try {
       const raw = window.localStorage.getItem('koine:compare:last');
       if (raw) {
         const last = JSON.parse(raw) as { osis?: unknown; chapter?: unknown };
         if (typeof last.osis === 'string' && Number.isInteger(last.chapter)) {
-          target = `/compare/${last.osis}/${last.chapter as number}`;
+          path = `/compare/${last.osis}/${last.chapter as number}`;
         }
+      }
+      // Versões preferidas: retoma a última seleção (evita o flash de cair no padrão
+      // do servidor e o redirect extra que o Comparator faria sem ?v).
+      const v = JSON.parse(window.localStorage.getItem('koine:compare:versions') ?? 'null') as unknown;
+      if (Array.isArray(v)) {
+        const codes = v.filter((c): c is string => typeof c === 'string');
+        if (codes.length > 0) query = `?v=${codes.join(',')}`;
       }
     } catch {
       // localStorage indisponível ou JSON corrompido — usa o fallback.
     }
-    router.replace(target);
+    router.replace(`${path}${query}`);
   }, [router]);
 
   return (

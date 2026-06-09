@@ -133,7 +133,7 @@ export function StudyModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)]">
           {/* Modos */}
           <div className="flex flex-wrap gap-2">
             {STUDY_MODES.map((m) => {

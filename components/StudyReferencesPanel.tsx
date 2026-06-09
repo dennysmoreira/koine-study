@@ -15,7 +15,7 @@
  */
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { addReferencesToStudy, removeStudyReference, type ReferenceInput } from '@/app/study/actions';
+import { addReferencesToStudy, removeStudyReferences, type ReferenceInput } from '@/app/study/actions';
 import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
 import { verseRef } from '@/lib/refs';
 import type { StudyReference } from '@/lib/saved-studies';
@@ -23,6 +23,41 @@ import type { StudyReference } from '@/lib/saved-studies';
 export interface BookOption {
   osis: string;
   name: string;
+}
+
+// Uma faixa contígua de versículos do mesmo livro+capítulo (ex.: 34–36). Os `ids`
+// são todas as referências cobertas, para remover a faixa inteira de uma vez.
+interface RefRange {
+  osis: string;
+  bookName: string;
+  chapter: number;
+  from: number;
+  to: number;
+  ids: number[];
+}
+
+// Colapsa referências por-versículo em FAIXAS contíguas, para a lista não explodir
+// (ex.: Salmo 119 inteiro vira uma linha "Salmo 119:1–176" em vez de 176 linhas).
+function groupReferences(refs: StudyReference[]): RefRange[] {
+  const sorted = [...refs].sort(
+    (a, b) => a.osis.localeCompare(b.osis) || a.chapter - b.chapter || a.verse - b.verse,
+  );
+  const ranges: RefRange[] = [];
+  for (const r of sorted) {
+    const last = ranges[ranges.length - 1];
+    if (last && last.osis === r.osis && last.chapter === r.chapter && r.verse <= last.to + 1) {
+      // contíguo (ou duplicado por segurança): estende a faixa atual
+      last.to = Math.max(last.to, r.verse);
+      last.ids.push(r.id);
+    } else {
+      ranges.push({ osis: r.osis, bookName: r.bookName, chapter: r.chapter, from: r.verse, to: r.verse, ids: [r.id] });
+    }
+  }
+  return ranges;
+}
+
+function rangeLabel(r: RefRange): string {
+  return r.from === r.to ? `${r.bookName} ${r.chapter}:${r.from}` : `${r.bookName} ${r.chapter}:${r.from}–${r.to}`;
 }
 
 export function StudyReferencesPanel({
@@ -139,13 +174,15 @@ export function StudyReferencesPanel({
     setSelected(new Set(verses));
   }
 
-  function citar() {
+  // Cita um conjunto explícito de versículos do capítulo aberto. Centralizado para
+  // que "Citar (seleção)" e "Capítulo inteiro" compartilhem a mesma gravação.
+  function citeVerses(verseNums: number[]) {
     const book = books.find((b) => b.osis === osis);
-    if (!book || chapter == null || selected.size === 0) {
+    if (!book || chapter == null || verseNums.length === 0) {
       setError('Selecione ao menos um versículo.');
       return;
     }
-    const refs: ReferenceInput[] = [...selected]
+    const refs: ReferenceInput[] = [...new Set(verseNums)]
       .sort((a, b) => a - b)
       .map((v) => ({
         // Formato canônico (= verse_texts.ref e citações do comparador), para o
@@ -167,9 +204,14 @@ export function StudyReferencesPanel({
     });
   }
 
-  function remove(id: number) {
+  function citar() {
+    citeVerses([...selected]);
+  }
+
+  // Remove uma FAIXA inteira de versículos (1 ou N linhas) de uma vez.
+  function removeRange(ids: number[]) {
     startTransition(async () => {
-      const res = await removeStudyReference(id);
+      const res = await removeStudyReferences(ids);
       if (res.ok) router.refresh();
       else setError(res.error ?? 'Falha ao remover.');
     });
@@ -178,35 +220,43 @@ export function StudyReferencesPanel({
   const selectClass =
     'w-full rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-800';
 
+  // Faixas compactas: versículos contíguos viram uma só linha (ex.: "Salmo 119:1–176").
+  const ranges = groupReferences(references);
+
   return (
     <div>
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         Versículos citados ({references.length})
       </h2>
 
-      {references.length === 0 ? (
+      {ranges.length === 0 ? (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">Nenhum versículo citado ainda.</p>
       ) : (
         <ul className="space-y-1">
-          {references.map((r) => (
-            <li
-              key={r.id}
-              className="flex items-center gap-2 rounded-md bg-neutral-100 px-2 py-1 text-xs dark:bg-neutral-800/60"
-            >
-              <span className="min-w-0 flex-1 truncate">
-                {r.bookName} {r.chapter}:{r.verse}
-              </span>
-              <button
-                type="button"
-                onClick={() => remove(r.id)}
-                disabled={pending}
-                aria-label={`Remover ${r.bookName} ${r.chapter}:${r.verse}`}
-                className="flex size-7 shrink-0 items-center justify-center rounded text-neutral-500 transition hover:text-red-600 disabled:opacity-50 dark:text-neutral-400"
+          {ranges.map((r) => {
+            const label = rangeLabel(r);
+            const count = r.to - r.from + 1;
+            return (
+              <li
+                key={`${r.osis}-${r.chapter}-${r.from}-${r.to}`}
+                className="flex items-center gap-2 rounded-md bg-neutral-100 px-2 py-1 text-xs dark:bg-neutral-800/60"
               >
-                ✕
-              </button>
-            </li>
-          ))}
+                <span className="min-w-0 flex-1 truncate">
+                  {label}
+                  {count > 1 && <span className="ml-1 text-neutral-400">({count} vers.)</span>}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeRange(r.ids)}
+                  disabled={pending}
+                  aria-label={`Remover ${label}`}
+                  className="flex size-7 shrink-0 items-center justify-center rounded text-neutral-500 transition hover:text-red-600 disabled:opacity-50 dark:text-neutral-400"
+                >
+                  ✕
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -252,6 +302,23 @@ export function StudyReferencesPanel({
                 <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Nenhum versículo neste capítulo.</p>
               ) : (
                 <>
+                  {/* Caminho rápido: cita o capítulo inteiro num toque (ex.: Salmo 119
+                      vira uma só faixa "1–176", sem marcar versículo por versículo). */}
+                  <button
+                    type="button"
+                    onClick={() => citeVerses(verses)}
+                    disabled={pending}
+                    className="w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                  >
+                    {pending ? 'Citando…' : `Citar capítulo inteiro (${verses.length} vers.)`}
+                  </button>
+
+                  <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                    <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+                    ou selecione um trecho
+                    <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+                  </div>
+
                   {/* Atalho de intervalo: marca um trecho contíguo de uma vez. */}
                   <div className="flex items-end gap-2">
                     <label className="flex flex-1 flex-col gap-1 text-[11px] text-neutral-500 dark:text-neutral-400">

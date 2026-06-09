@@ -243,6 +243,31 @@ export async function removeStudyReference(id: number): Promise<{ ok: boolean; e
   return { ok: true };
 }
 
+// Teto de ids por remoção em lote — uma passagem grande (ex.: Salmo 119 = 176
+// versículos) é uma única faixa na UI, mas remove N linhas de uma vez.
+const MAX_BULK_REMOVE = 1000;
+
+/**
+ * Remove VÁRIAS referências de uma vez (usado quando o usuário apaga uma FAIXA
+ * inteira de versículos exibida como uma só linha, ex.: "Salmo 119:1–176"). RLS
+ * (own_studies via user_id na tabela) garante que só o dono apaga as próprias.
+ */
+export async function removeStudyReferences(ids: number[]): Promise<{ ok: boolean; error?: string }> {
+  const clean = Array.from(new Set((ids ?? []).filter((n) => Number.isInteger(n))));
+  if (clean.length === 0) return { ok: false, error: 'Nada para remover.' };
+  if (clean.length > MAX_BULK_REMOVE) return { ok: false, error: 'Seleção grande demais.' };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sessão expirada. Entre novamente.' };
+
+  const { error } = await supabase.from('study_references').delete().in('id', clean);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 // Teto de caracteres de uma fonte de texto inline (fronteira de confiança no
 // servidor; evita gravar uma linha gigante em study_sources).
 const MAX_TEXT_SOURCE_CHARS = 50000;
