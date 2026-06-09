@@ -25,6 +25,13 @@ const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
         iconClass: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
       },
       {
+        href: '/reading',
+        icon: '📅',
+        title: 'Planos de leitura',
+        description: 'Leia a Bíblia dia a dia, com progresso salvo.',
+        iconClass: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
+      },
+      {
         href: '/studies',
         icon: '✨',
         title: 'Estudos salvos',
