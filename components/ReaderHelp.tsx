@@ -7,6 +7,7 @@
  * (localStorage) e fica acessível pelo botão "?" no cabeçalho do comparador.
  */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const HINT_KEY = 'koine:reader:hinted';
 
@@ -52,7 +53,10 @@ export function ReaderHelp() {
         ?
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
+        // Portal para o body: o cabeçalho do leitor usa backdrop-blur, que cria um
+        // containing block para position:fixed — sem o portal, esta folha ficaria
+        // confinada à caixa do header (estreita, no topo) em vez de cobrir a tela.
         <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
           <button type="button" aria-label="Fechar" onClick={() => setOpen(false)} className="absolute inset-0 bg-black/40" />
           <div className="relative max-h-[75dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
@@ -82,7 +86,8 @@ export function ReaderHelp() {
               Entendi
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
