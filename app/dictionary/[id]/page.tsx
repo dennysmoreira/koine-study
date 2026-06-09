@@ -52,10 +52,19 @@ export default async function DictionaryEntryPage({ params }: { params: { id: st
         {entry.gloss_en && (
           <p className="mt-1 text-sm text-neutral-500">{entry.gloss_en}</p>
         )}
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-400">
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
           {!isHebrew && <span>Aparece {entry.frequency}× no NT</span>}
           {entry.strongs && <span>Strong&apos;s {entry.strongs}</span>}
         </div>
+      </div>
+
+      <div className="mt-5">
+        <Link
+          href={`/dictionary/${lemmaId}/occurrences`}
+          className="inline-flex min-h-[44px] items-center rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400"
+        >
+          Ver todas as ocorrências →
+        </Link>
       </div>
 
       {isHebrew && bdb && (
