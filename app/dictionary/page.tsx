@@ -6,7 +6,7 @@ import { DictionarySearch } from '@/components/DictionarySearch';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Dicionário · Koiné Study',
+  title: 'Dicionário · Hermeneus',
 };
 
 // Abas de idioma: o dicionário é compartilhado, mas grego e hebraico têm formas,

@@ -1,18 +1,18 @@
-# koine-study
+# Hermeneus
 
-Plataforma de estudo de **grego koiné para exegese bíblica**. SaaS, mobile-first (PWA).
+Leitura e exegese do texto bíblico **no original — grego e hebraico**. PWA, mobile-first.
 
-Quatro modos de estudo, todos alimentados por um único corpus etiquetado:
+Recursos, todos sobre um único corpus etiquetado (grego do NT + hebraico do AT):
 
-1. **Leitor interlinear** — texto grego do NT com análise morfológica palavra-a-palavra e léxico ao toque.
-2. **Vocabulário (SRS)** — flashcards com repetição espaçada (FSRS), listas por frequência.
-3. **Parsing** — quiz de análise morfológica (tempo/voz/modo/caso…).
-4. **Gramática/Lições** — trilha estruturada (alfabeto → casos → verbos).
+1. **Leitor / comparador** — interlinear (morfologia + léxico ao toque), traduções lado a lado, referências cruzadas (TSK) e anotações por versículo.
+2. **Dicionário & concordância** — busca de lemas e todas as ocorrências de uma palavra no corpus.
+3. **Estudo com IA** — análise exegética conversacional fundamentada no texto original.
+4. **Planos de leitura** e **compartilhamento** (link público read-only + PDF).
 
 ## Arquitetura (data-first)
 
-O ativo central é o **corpus**: texto grego + morfologia + léxico + frequência. Os quatro
-modos são "views" sobre esse mesmo dado. Por isso a construção começa pela ingestão.
+O ativo central é o **corpus**: texto grego + hebraico + morfologia + léxico + frequência. Os
+recursos são "views" sobre esse mesmo dado. Por isso a construção começa pela ingestão.
 
 ```
         CORPUS (verses + tokens + lemmas + morfologia)

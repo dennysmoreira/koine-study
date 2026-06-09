@@ -3,13 +3,13 @@ import './globals.css';
 import { AppShell } from '@/components/AppShell';
 
 export const metadata: Metadata = {
-  title: 'Koiné Study',
-  description: 'Plataforma de estudo de grego koiné para exegese bíblica.',
+  title: 'Hermeneus',
+  description: 'Leitura e exegese do texto bíblico no original — grego e hebraico.',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Koiné Study',
+    title: 'Hermeneus',
   },
 };
 

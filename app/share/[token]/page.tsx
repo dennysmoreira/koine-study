@@ -143,7 +143,7 @@ export default async function SharePage({ params }: { params: { token: string } 
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <header className="mb-6 flex items-center justify-between gap-4">
         <Link href="/" className="text-lg font-bold tracking-tight">
-          koiné
+          Hermeneus
         </Link>
         <a
           href={`/share/${params.token}/pdf`}
@@ -156,7 +156,7 @@ export default async function SharePage({ params }: { params: { token: string } 
       {snapshot.kind === 'study' ? <StudyView s={snapshot} /> : <AnnotationView s={snapshot} />}
 
       <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs text-neutral-500 dark:text-neutral-400 dark:border-neutral-800">
-        Compartilhado de <span className="font-medium">koiné</span> · snapshot de {dateFmt.format(new Date(snapshotAt))}
+        Compartilhado de <span className="font-medium">Hermeneus</span> · snapshot de {dateFmt.format(new Date(snapshotAt))}
       </footer>
     </main>
   );

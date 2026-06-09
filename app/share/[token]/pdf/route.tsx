@@ -14,7 +14,7 @@ function safeFilename(title: string): string {
     .replace(/[^\w.\-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
-  return `${base || 'koine'}.pdf`;
+  return `${base || 'hermeneus'}.pdf`;
 }
 
 export async function GET(_req: Request, { params }: { params: { token: string } }) {

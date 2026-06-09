@@ -13,9 +13,9 @@ export default async function LoginPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center px-6 py-10">
       <header className="mb-8 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Koiné Study</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Hermeneus</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Entre para salvar seu vocabulário e progresso.
+          Entre para salvar seus estudos e anotações.
         </p>
       </header>
 

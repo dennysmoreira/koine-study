@@ -115,12 +115,12 @@ function AnnotationBody({ s }: { s: AnnotationSnapshot }) {
 
 export function SnapshotPdf({ snapshot, snapshotAt }: { snapshot: SharedSnapshot; snapshotAt: string }) {
   return (
-    <Document title={snapshot.title} author="koiné">
+    <Document title={snapshot.title} author="Hermeneus">
       <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>koiné</Text>
+        <Text style={styles.brand}>Hermeneus</Text>
         {snapshot.kind === 'study' ? <StudyBody s={snapshot} /> : <AnnotationBody s={snapshot} />}
         <Text style={styles.footer} fixed>
-          Compartilhado de koiné · snapshot de {dateFmt.format(new Date(snapshotAt))}
+          Compartilhado de Hermeneus · snapshot de {dateFmt.format(new Date(snapshotAt))}
         </Text>
       </Page>
     </Document>
