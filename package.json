@@ -38,6 +38,7 @@
     "ingest:hebrew-interlinear": "tsx scripts/ingest/index.ts --step=ingest-hebrew-interlinear",
     "ingest:translate-hebrew": "tsx scripts/ingest/index.ts --step=translate-hebrew",
     "ingest:thiagobodruk": "tsx scripts/ingest/index.ts --step=ingest-thiagobodruk",
+    "ingest:cross-references": "tsx scripts/ingest/cross-references.ts",
     "morph:test": "tsx scripts/ingest/morph-decoder.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json"

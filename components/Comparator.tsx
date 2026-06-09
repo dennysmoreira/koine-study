@@ -14,6 +14,7 @@ import { HebrewWordSheet } from './hebrew/HebrewWordSheet';
 import { StudyModal } from './StudyModal';
 import { VerseSelectionBar } from './VerseSelectionBar';
 import { AnnotationSheet } from './AnnotationSheet';
+import { CrossRefsSheet } from './CrossRefsSheet';
 import type { ReferenceInput } from '@/app/study/actions';
 import type { Annotation } from '@/lib/annotations';
 import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
@@ -389,6 +390,8 @@ export function Comparator({
   const highlightTimer = useRef<number | null>(null);
   // Versículo cujas anotações estão abertas na folha de leitura (marcador 📝).
   const [annotationVerse, setAnnotationVerse] = useState<number | null>(null);
+  // Versículo cujas referências cruzadas (TSK) estão abertas (toque no número).
+  const [crossRefVerse, setCrossRefVerse] = useState<number | null>(null);
   const searchParams = useSearchParams();
 
   // Índice versículo → anotações que o cobrem (faixa verse_start..verse_end), para
@@ -655,9 +658,20 @@ export function Comparator({
                         {t.name}
                       </span>
                       <p className="flex items-start gap-1.5 text-[15px] leading-relaxed">
-                        <span className="mt-0.5 select-none text-xs font-semibold text-neutral-500 dark:text-neutral-400">
-                          {row.verse === 0 ? 'tít.' : row.verse}
-                        </span>
+                        {row.verse === 0 ? (
+                          <span className="mt-0.5 select-none text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+                            tít.
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setCrossRefVerse(row.verse)}
+                            aria-label={`Referências cruzadas do versículo ${row.verse}`}
+                            className="mt-0.5 select-none text-xs font-semibold text-neutral-500 transition hover:text-amber-700 dark:text-neutral-400 dark:hover:text-amber-400"
+                          >
+                            {row.verse}
+                          </button>
+                        )}
                         {showTokens ? (
                           <GreekVerse
                             tokens={originalTokens}
@@ -743,6 +757,16 @@ export function Comparator({
           verse={annotationVerse}
           annotations={annotationsByVerse.get(annotationVerse) ?? []}
           onClose={() => setAnnotationVerse(null)}
+        />
+      )}
+
+      {crossRefVerse != null && (
+        <CrossRefsSheet
+          osis={book.osis_code}
+          bookName={book.name_pt}
+          chapter={number}
+          verse={crossRefVerse}
+          onClose={() => setCrossRefVerse(null)}
         />
       )}
 

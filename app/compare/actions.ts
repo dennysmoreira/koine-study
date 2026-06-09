@@ -4,6 +4,20 @@ import { supabase } from '@/lib/supabase';
 import { getLexiconEntries, getBookByOsis, getBooks, type LexiconEntry } from '@/lib/corpus';
 import { getTranslations } from '@/lib/translations';
 import { originalToDisplay, originalChapterWindow } from '@/lib/versification';
+import { getCrossReferences, type CrossRef } from '@/lib/cross-references';
+
+/**
+ * Referências cruzadas (TSK) de um versículo, no eixo de display. Chamada sob
+ * demanda pelo comparador quando o usuário abre o painel de um versículo.
+ */
+export async function getVerseCrossReferences(
+  osis: string,
+  chapter: number,
+  verse: number,
+): Promise<CrossRef[]> {
+  if (!osis || !Number.isInteger(chapter) || !Number.isInteger(verse)) return [];
+  return getCrossReferences(osis, chapter, verse);
+}
 
 export interface BookOption {
   osis: string;
