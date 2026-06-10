@@ -5,7 +5,8 @@
  */
 import 'server-only';
 import { createClient } from './supabase/server';
-import { PLANS, type Reading } from './reading-plans';
+import { PLANS, type Reading, type ReadingPlan } from './reading-plans';
+import { getCustomPlan, CUSTOM_PLAN_PREFIX } from './custom-plans';
 
 /** Conjunto de dias concluídos de um plano (vazio se anônimo). */
 export async function getCompletedDays(planId: string): Promise<Set<number>> {
@@ -61,8 +62,13 @@ export async function getTodayReading(): Promise<TodayReading | null> {
   }
 
   for (const planId of recencyOrder) {
-    const plan = PLANS.find((p) => p.id === planId);
-    if (!plan) continue; // plano removido do catálogo
+    // Custom resolvido LAZY, um por vez: o loop retorna no primeiro plano
+    // incompleto (quase sempre o mais recente), então materializar todos os
+    // planos custom de antemão seria trabalho desperdiçado na home.
+    const plan: ReadingPlan | null =
+      PLANS.find((p) => p.id === planId) ??
+      (planId.startsWith(CUSTOM_PLAN_PREFIX) ? await getCustomPlan(planId) : null);
+    if (!plan) continue; // plano removido do catálogo (ou custom excluído)
     const done = doneByPlan.get(planId)!;
     // próximo dia = o primeiro não concluído na sequência (toggles fora de ordem
     // contam: o usuário volta ao buraco mais antigo).

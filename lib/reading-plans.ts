@@ -54,6 +54,16 @@ const BOOKS: { osis: string; chapters: number }[] = [
 
 const byOsis = new Map(BOOKS.map((b) => [b.osis, b]));
 
+// Catálogo leve (osis + nº de capítulos, ordem canônica) para o formulário de
+// plano personalizado calcular a prévia ("X capítulos → Y dias") no cliente sem
+// arrastar os PLANS inteiros para o bundle.
+export const BOOK_CATALOG: ReadonlyArray<{ osis: string; chapters: number }> = BOOKS;
+
+/** nº de capítulos de um livro (0 se osis desconhecido). */
+export function chapterCountOf(osis: string): number {
+  return byOsis.get(osis)?.chapters ?? 0;
+}
+
 // Expande uma lista de livros (por osis) na sequência plana de capítulos.
 function chaptersOf(osisList: string[]): Reading[] {
   const out: Reading[] = [];
@@ -72,6 +82,15 @@ function intoDays(readings: Reading[], perDay: number): PlanDay[] {
     days.push({ day: days.length + 1, readings: readings.slice(i, i + perDay) });
   }
   return days;
+}
+
+/**
+ * Deriva os dias de um plano a partir da "receita" (livros + capítulos/dia) —
+ * usada pelos planos fixos abaixo E pelos planos personalizados (custom_plans),
+ * que armazenam só a receita e derivam os dias deterministicamente.
+ */
+export function buildPlanDays(osisList: string[], perDay: number): PlanDay[] {
+  return intoDays(chaptersOf(osisList), perDay);
 }
 
 const NT = BOOKS.slice(39).map((b) => b.osis); // Mateus → Apocalipse
