@@ -18,6 +18,7 @@ import { CrossRefsSheet } from './CrossRefsSheet';
 import { ReaderHelp } from './ReaderHelp';
 import type { ReferenceInput } from '@/app/study/actions';
 import type { Annotation } from '@/lib/annotations';
+import type { HighlightColor } from '@/lib/highlight-colors';
 import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
 import {
   DEFAULT_FONT_SIZE,
@@ -382,16 +383,29 @@ function VersionSheet({
   );
 }
 
+// Tinta de fundo por cor de destaque (sutil; dark-mode aware). Cede lugar ao
+// realce transitório (goto) e à seleção, que têm prioridade visual.
+const HIGHLIGHT_TINT: Record<HighlightColor, string> = {
+  yellow: 'bg-yellow-100/70 dark:bg-yellow-500/10',
+  green: 'bg-green-100/70 dark:bg-green-500/10',
+  blue: 'bg-sky-100/70 dark:bg-sky-500/10',
+  pink: 'bg-pink-100/70 dark:bg-pink-500/10',
+  purple: 'bg-violet-100/70 dark:bg-violet-500/10',
+};
+
 export function Comparator({
   chapter,
   books,
   allTranslations,
   annotations,
+  highlights,
 }: {
   chapter: ChapterView;
   books: Book[];
   allTranslations: Translation[];
   annotations: Annotation[];
+  /** verso → cor do marca-texto do usuário (vazio se anônimo). */
+  highlights: Record<number, HighlightColor>;
 }) {
   const { book, number, chapters, translations, rows, greekLexicon, hebrewLexicon } = chapter;
   const [navOpen, setNavOpen] = useState(false);
@@ -415,6 +429,11 @@ export function Comparator({
   // assume o valor salvo após a montagem — evita divergência de hidratação.
   const [fontSize, setFontSize] = useState<ReaderFontSize>(DEFAULT_FONT_SIZE);
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  // Leitura em voz alta (Web Speech): fala os versículos da tradução em sequência,
+  // destacando e rolando até o atual. 'paused' espelha synth.pause/resume.
+  const [listening, setListening] = useState(false);
+  const [listenPaused, setListenPaused] = useState(false);
+  const [speakingVerse, setSpeakingVerse] = useState<number | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -501,6 +520,109 @@ export function Comparator({
     }
     return () => io.disconnect();
   }, [rows]);
+
+  // ── Ouvir o capítulo ──
+  // Token de SESSÃO: callbacks encadeados (onend/onerror, voiceschanged tardio)
+  // só agem se a sessão capturada ainda for a atual — cancelar/trocar de capítulo
+  // invalida a sessão e os callbacks órfãos viram no-op (sem corrida entre rotas).
+  const listenSession = useRef(0);
+  const pendingVoicesRun = useRef<(() => void) | null>(null);
+
+  const stopListening = () => {
+    listenSession.current++;
+    if (pendingVoicesRun.current) {
+      window.speechSynthesis?.removeEventListener('voiceschanged', pendingVoicesRun.current);
+      pendingVoicesRun.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    setListening(false);
+    setListenPaused(false);
+    setSpeakingVerse(null);
+  };
+
+  function startListening() {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const synth = window.speechSynthesis;
+    const code = translations.find((t) => !t.is_original)?.code;
+    if (!code) return;
+    const items = rows
+      .filter((r) => r.verse >= 1 && r.texts[code])
+      .map((r) => ({ verse: r.verse, text: r.texts[code] as string }));
+    if (items.length === 0) return;
+
+    const session = ++listenSession.current;
+
+    const run = () => {
+      pendingVoicesRun.current = null;
+      if (listenSession.current !== session) return; // sessão cancelada enquanto esperava vozes
+      synth.cancel();
+      const voices = synth.getVoices();
+      const pt = voices.find((v) => v.lang?.toLowerCase().startsWith('pt'));
+      setListening(true);
+      setListenPaused(false);
+
+      let i = 0;
+      const speakNext = () => {
+        if (listenSession.current !== session) return;
+        const item = items[i++];
+        if (!item) {
+          stopListening();
+          return;
+        }
+        setSpeakingVerse(item.verse);
+        document.getElementById(`v${item.verse}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const u = new SpeechSynthesisUtterance(item.text);
+        if (pt) {
+          u.voice = pt;
+          u.lang = pt.lang;
+        }
+        u.rate = 0.95;
+        u.onend = speakNext;
+        u.onerror = () => {
+          if (listenSession.current === session) stopListening();
+        };
+        synth.speak(u);
+      };
+      speakNext();
+    };
+
+    // Vozes carregam de forma assíncrona; na 1ª chamada getVoices() pode vir vazio.
+    if (synth.getVoices().length === 0) {
+      pendingVoicesRun.current = run;
+      synth.addEventListener('voiceschanged', run, { once: true });
+    } else {
+      run();
+    }
+  }
+
+  const toggleListenPause = () => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    if (listenPaused) {
+      synth.resume();
+      setListenPaused(false);
+    } else {
+      synth.pause();
+      setListenPaused(true);
+    }
+  };
+
+  // Encerra a fala ao trocar de capítulo ou desmontar: invalida a sessão, remove
+  // um voiceschanged pendente (senão falaria o capítulo ANTERIOR quando as vozes
+  // carregassem) e cancela a fila de utterances.
+  useEffect(() => {
+    return () => {
+      // refs aqui são CONTADOR/HANDLER mutáveis (não nós React): o cleanup deve
+      // ler o valor ATUAL de propósito — o aviso exhaustive-deps não se aplica.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      listenSession.current++;
+      if (pendingVoicesRun.current) {
+        window.speechSynthesis?.removeEventListener('voiceschanged', pendingVoicesRun.current);
+        pendingVoicesRun.current = null;
+      }
+      window.speechSynthesis?.cancel();
+    };
+  }, [chapterKey]);
 
   // Rastreio de rolagem (um listener só, com rAF): direção alimenta o auto-hide
   // do header (esconde ao descer, volta ao subir — leitura imersiva) e a distância
@@ -592,6 +714,52 @@ export function Comparator({
   const idx = chapters.indexOf(number);
   const prev = idx > 0 ? chapters[idx - 1] : null;
   const next = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null;
+
+  // Swipe horizontal para trocar de capítulo (gesto natural de "virar página").
+  // Critérios: deslocamento horizontal ≥ 70px, dominância horizontal (2× o
+  // vertical), fora do modo seleção, sem sheet aberto e sem texto selecionado
+  // (senão o gesto de selecionar texto viraria navegação acidental). Declarado
+  // APÓS prev/next/codesKey: o deps array é avaliado no render (TDZ).
+  useEffect(() => {
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const t0 = e.touches.length === 1 ? e.touches[0] : undefined;
+      if (!t0) return;
+      startX = t0.clientX;
+      startY = t0.clientY;
+      tracking = true;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      if (selectMode || navOpen || versionsOpen || studyOpen) return;
+      if (document.querySelector('[role="dialog"]')) return; // qualquer sheet aberto
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return; // usuário selecionando texto
+
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
+
+      // swipe p/ esquerda = avançar; p/ direita = voltar
+      const target = dx < 0 ? next : prev;
+      if (target != null) {
+        router.push(compareHref(book.osis_code, target, codesKey ? codesKey.split(',') : []));
+      }
+    };
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [selectMode, navOpen, versionsOpen, studyOpen, prev, next, codesKey, book.osis_code, router]);
 
   // colunas dinâmicas: estilo inline (o JIT do Tailwind não gera grid-cols-N
   // arbitrário). Só vale no breakpoint `sm` (sm:grid); no mobile empilha.
@@ -765,6 +933,17 @@ export function Comparator({
           <div className="relative ml-auto flex items-center gap-1">
             <button
               type="button"
+              onClick={() => (listening ? stopListening() : startListening())}
+              aria-label={listening ? 'Parar leitura em voz alta' : 'Ouvir o capítulo'}
+              aria-pressed={listening}
+              className={`rounded-md px-2 py-1 transition hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+                listening ? 'text-amber-700 dark:text-amber-400' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200'
+              }`}
+            >
+              <span aria-hidden>🔊</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setFontMenuOpen((o) => !o)}
               aria-label="Tamanho da fonte"
               aria-expanded={fontMenuOpen}
@@ -830,15 +1009,16 @@ export function Comparator({
               selectedHebrew?.verse === row.verse ? selectedHebrew.word.position : null;
             const isSelected = selectedVerses.has(row.verse);
             const verseAnnotations = annotationsByVerse.get(row.verse);
+            const tint = highlights[row.verse];
             return (
               <div
                 key={row.verse}
                 id={`v${row.verse}`}
                 className={`relative scroll-mt-20 rounded-md border-b border-neutral-100 py-3 transition-colors duration-500 last:border-0 dark:border-neutral-800/60 ${
                   selectMode ? 'flex gap-3' : ''
-                } ${highlight === row.verse ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${
+                } ${highlight === row.verse || speakingVerse === row.verse ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${
                   isSelected ? 'bg-amber-50/70 dark:bg-amber-900/10' : ''
-                }`}
+                } ${tint && highlight !== row.verse && speakingVerse !== row.verse && !isSelected ? HIGHLIGHT_TINT[tint] : ''}`}
               >
                 {verseAnnotations && verseAnnotations.length > 0 && (
                   <button
@@ -943,6 +1123,31 @@ export function Comparator({
 
         <Attributions translations={translations} />
       </main>
+
+      {/* Controle da leitura em voz alta: pausa/retoma e parar. */}
+      {listening && (
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] left-4 z-30 flex items-center gap-1 rounded-full border border-neutral-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
+          <span className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+            🔊 {speakingVerse != null ? `v. ${speakingVerse}` : '…'}
+          </span>
+          <button
+            type="button"
+            onClick={toggleListenPause}
+            aria-label={listenPaused ? 'Retomar leitura' : 'Pausar leitura'}
+            className="flex size-8 items-center justify-center rounded-full text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <span aria-hidden>{listenPaused ? '▶' : '⏸'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={stopListening}
+            aria-label="Parar leitura"
+            className="flex size-8 items-center justify-center rounded-full text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <span aria-hidden>✕</span>
+          </button>
+        </div>
+      )}
 
       {/* Chip flutuante de posição: mostra o versículo atual em capítulos longos e
           abre o seletor (já posicionado no capítulo, com a grade de versículos). */}

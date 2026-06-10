@@ -4,6 +4,7 @@ import { getBooks } from '@/lib/corpus';
 import { getTranslations } from '@/lib/translations';
 import { getChapterView } from '@/lib/chapter-view';
 import { getAnnotationsForChapter } from '@/lib/annotations-server';
+import { getHighlightsForChapter } from '@/lib/highlights';
 import { Comparator } from '@/components/Comparator';
 
 export const dynamic = 'force-dynamic';
@@ -35,10 +36,11 @@ export default async function ComparePage({
     ? searchParams.v.split(',').map((c) => c.trim()).filter(Boolean)
     : defaultCodes(allTranslations);
 
-  const [chapter, books, annotations] = await Promise.all([
+  const [chapter, books, annotations, highlights] = await Promise.all([
     getChapterView(osis, chapterNumber, requested),
     getBooks(),
     getAnnotationsForChapter(osis, chapterNumber),
+    getHighlightsForChapter(osis, chapterNumber),
   ]);
 
   if (!chapter || chapter.rows.length === 0) {
@@ -55,6 +57,12 @@ export default async function ComparePage({
   }
 
   return (
-    <Comparator chapter={chapter} books={books} allTranslations={allTranslations} annotations={annotations} />
+    <Comparator
+      chapter={chapter}
+      books={books}
+      allTranslations={allTranslations}
+      annotations={annotations}
+      highlights={highlights}
+    />
   );
 }

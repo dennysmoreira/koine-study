@@ -29,6 +29,49 @@ export interface TodayReading {
   totalDays: number;
   doneDays: number;
   readings: Reading[];
+  /** dias consecutivos com leitura marcada (0 = sem sequência ativa). */
+  streak: number;
+}
+
+// Fuso do usuário para o corte de "dia" do streak (app pessoal, pt-BR). Sem
+// isso, marcar à noite contaria como o dia seguinte no UTC do servidor.
+const STREAK_TZ = 'America/Sao_Paulo';
+
+function dayKeyInTz(date: Date): string {
+  // en-CA = YYYY-MM-DD, estável para comparação.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: STREAK_TZ }).format(date);
+}
+
+/**
+ * Sequência de dias consecutivos com ALGUMA marcação de leitura (qualquer plano),
+ * terminando hoje ou ontem — quem ainda não leu hoje não perde o streak até o
+ * dia virar; quem pulou um dia recomeça do zero.
+ */
+function computeStreak(completedAts: string[]): number {
+  if (completedAts.length === 0) return 0;
+  const days = new Set(completedAts.map((iso) => dayKeyInTz(new Date(iso))));
+
+  const cursor = new Date();
+  if (!days.has(dayKeyInTz(cursor))) cursor.setDate(cursor.getDate() - 1); // graça de hoje
+  let streak = 0;
+  while (days.has(dayKeyInTz(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+/** Streak de leitura do usuário (0 se anônimo/sem progresso). */
+export async function getReadingStreak(): Promise<number> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { data, error } = await supabase.from('reading_progress').select('completed_at');
+  if (error || !data) return 0;
+  return computeStreak((data as { completed_at: string }[]).map((r) => r.completed_at));
 }
 
 /**
@@ -50,7 +93,8 @@ export async function getTodayReading(): Promise<TodayReading | null> {
     .order('completed_at', { ascending: false });
   if (error || !data || data.length === 0) return null;
 
-  const rows = data as { plan_id: string; day: number }[];
+  const rows = data as { plan_id: string; day: number; completed_at: string }[];
+  const streak = computeStreak(rows.map((r) => r.completed_at));
   const doneByPlan = new Map<string, Set<number>>();
   const recencyOrder: string[] = [];
   for (const r of rows) {
@@ -81,6 +125,7 @@ export async function getTodayReading(): Promise<TodayReading | null> {
       totalDays: plan.days.length,
       doneDays: done.size,
       readings: next.readings,
+      streak,
     };
   }
   return null;

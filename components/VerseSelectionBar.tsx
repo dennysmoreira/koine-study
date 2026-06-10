@@ -22,6 +22,8 @@ import {
   type StudyOption,
 } from '@/app/study/actions';
 import { createAnnotation } from '@/app/annotations/actions';
+import { applyHighlight, removeHighlight } from '@/app/highlights/actions';
+import { HIGHLIGHT_COLORS, HIGHLIGHT_DOT, HIGHLIGHT_LABEL } from '@/lib/highlight-colors';
 import type { CrossRef } from '@/lib/annotations';
 import { CrossRefPicker } from './CrossRefPicker';
 import { CrossRefChips } from './CrossRefChips';
@@ -44,6 +46,8 @@ export function VerseSelectionBar({
   const [error, setError] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [note, setNote] = useState('');
+  // Seletor de cor do marca-texto (aberto pelo botão 🖍️ Destacar).
+  const [highlighting, setHighlighting] = useState(false);
   const [refs, setRefs] = useState<CrossRef[]>([]);
   const [pickingRef, setPickingRef] = useState(false);
 
@@ -109,6 +113,26 @@ export function VerseSelectionBar({
     });
   }
 
+  // Aplica/remove o marca-texto nos versículos selecionados. router.refresh()
+  // repuxa o mapa de destaques do servidor (a tinta aparece nas linhas).
+  function paint(color: string | null) {
+    const first = references[0];
+    if (!first) return;
+    setError(null);
+    startTransition(async () => {
+      const res = color
+        ? await applyHighlight(first.osis, first.chapter, verses, color)
+        : await removeHighlight(first.osis, first.chapter, verses);
+      if (res.ok) {
+        setHighlighting(false);
+        onClear();
+        router.refresh();
+      } else {
+        setError(res.error ?? 'Falha ao destacar.');
+      }
+    });
+  }
+
   function createWith(ask: boolean) {
     setError(null);
     startTransition(async () => {
@@ -144,6 +168,7 @@ export function VerseSelectionBar({
               type="button"
               onClick={() => {
                 setError(null);
+                setHighlighting(false);
                 setComposing((c) => !c);
               }}
               disabled={pending}
@@ -151,6 +176,19 @@ export function VerseSelectionBar({
               className="min-h-[44px] rounded-lg bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-200 disabled:opacity-60 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
             >
               <span aria-hidden>✍️</span> Anotar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setComposing(false);
+                setHighlighting((h) => !h);
+              }}
+              disabled={pending}
+              aria-pressed={highlighting}
+              className="min-h-[44px] rounded-lg bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-200 disabled:opacity-60 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+            >
+              <span aria-hidden>🖍️</span> Destacar
             </button>
             <button
               type="button"
@@ -164,11 +202,35 @@ export function VerseSelectionBar({
               type="button"
               onClick={() => createWith(true)}
               disabled={pending}
-              className="col-span-2 min-h-[44px] rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60 sm:col-span-1"
+              className="min-h-[44px] rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
             >
               <span aria-hidden>✨</span> Explicar com IA
             </button>
           </div>
+
+          {/* Seletor de cor: aplica nos versículos selecionados; "sem cor" remove. */}
+          {highlighting && (
+            <div className="mt-3 flex items-center gap-3" role="group" aria-label="Cor do destaque">
+              {HIGHLIGHT_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => paint(c)}
+                  disabled={pending}
+                  aria-label={`Destacar de ${HIGHLIGHT_LABEL[c].toLowerCase()}`}
+                  className={`size-9 rounded-full border-2 border-white shadow transition hover:scale-110 disabled:opacity-50 dark:border-neutral-700 ${HIGHLIGHT_DOT[c]}`}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() => paint(null)}
+                disabled={pending}
+                className="ml-1 min-h-[44px] rounded-lg px-3 py-2 text-sm text-neutral-500 transition hover:bg-neutral-100 disabled:opacity-50 dark:hover:bg-neutral-800"
+              >
+                Remover destaque
+              </button>
+            </div>
+          )}
         </div>
         {composing && (
           <div className="mx-auto mt-3 w-full max-w-5xl">

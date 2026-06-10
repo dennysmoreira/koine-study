@@ -28,7 +28,17 @@ export function TodayPlanCard({ today, bookNames }: { today: TodayReading; bookN
         <p className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400">
           Hoje no plano · {today.planTitle} ({today.doneDays}/{today.totalDays})
         </p>
-        <p className="truncate font-semibold">{label}</p>
+        <p className="truncate font-semibold">
+          {label}
+          {today.streak >= 2 && (
+            <span
+              className="ml-2 inline-flex items-center gap-0.5 rounded-full bg-orange-100 px-1.5 py-0.5 align-middle text-xs font-semibold text-orange-700 dark:bg-orange-950 dark:text-orange-300"
+              title={`${today.streak} dias seguidos de leitura`}
+            >
+              <span aria-hidden>🔥</span> {today.streak}
+            </span>
+          )}
+        </p>
       </div>
       <span aria-hidden className="shrink-0 text-sky-700 dark:text-sky-400">
         →

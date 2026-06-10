@@ -16,6 +16,13 @@ const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
     subtitle: 'Aprofunde e leia o texto.',
     items: [
       {
+        href: '/search',
+        icon: '🔍',
+        title: 'Buscar',
+        description: 'Versículos por palavras ou referência.',
+        iconClass: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
+      },
+      {
         href: '/dictionary',
         icon: '📚',
         title: 'Dicionário',

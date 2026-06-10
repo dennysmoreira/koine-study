@@ -1,7 +1,9 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
+  // lib/ entra no scan: módulos de dados puros (ex.: highlight-colors) declaram
+  // classes Tailwind completas que o JIT precisa ver para gerar o CSS.
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', './lib/**/*.{ts,tsx}'],
   theme: {
     extend: {
       fontFamily: {

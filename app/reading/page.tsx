@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { PLANS, type ReadingPlan } from '@/lib/reading-plans';
-import { getPlanProgress } from '@/lib/reading-progress';
+import { getPlanProgress, getReadingStreak } from '@/lib/reading-progress';
 import { listCustomPlans } from '@/lib/custom-plans';
 import { getBooks } from '@/lib/corpus';
 import { chapterCountOf } from '@/lib/reading-plans';
@@ -36,10 +36,11 @@ function PlanCard({ plan, done }: { plan: ReadingPlan; done: number }) {
 }
 
 export default async function ReadingPlansPage() {
-  const [progress, customPlans, books] = await Promise.all([
+  const [progress, customPlans, books, streak] = await Promise.all([
     getPlanProgress(),
     listCustomPlans(),
     getBooks(),
+    getReadingStreak(),
   ]);
 
   // chapters vem do MESMO catálogo que o servidor usa ao criar (chapterCountOf):
@@ -66,6 +67,12 @@ export default async function ReadingPlansPage() {
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         Acompanhe sua leitura dia a dia. O progresso fica salvo na sua conta.
       </p>
+
+      {streak >= 2 && (
+        <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+          <span aria-hidden>🔥</span> {streak} dias seguidos de leitura
+        </p>
+      )}
 
       <CreatePlanForm books={bookOptions} />
 
