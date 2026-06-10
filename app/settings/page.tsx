@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { hasUserGeminiKey } from '@/lib/user-settings';
 import { GeminiKeyForm } from '@/components/GeminiKeyForm';
+import { ReaderPreferences } from '@/components/ReaderPreferences';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,10 +29,14 @@ export default async function SettingsPage() {
 
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
-        <p className="text-sm text-neutral-500">Inteligência artificial do estudo.</p>
+        <p className="text-sm text-neutral-500">Leitura e inteligência artificial do estudo.</p>
       </div>
 
-      <GeminiKeyForm hasKey={hasKey} />
+      <ReaderPreferences />
+
+      <div className="mt-6">
+        <GeminiKeyForm hasKey={hasKey} />
+      </div>
 
       <p className="mt-4 text-xs text-neutral-400">
         Sem chave própria, o estudo com IA usa uma cota compartilhada (limitada) e, como rede de

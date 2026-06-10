@@ -42,6 +42,31 @@ body {
   }
 }
 
+/* Tamanho de fonte do leitor (preferência Aa — lib/reader-prefs.ts). O container
+   do leitor recebe data-fontsize e estas regras escalam o texto dos versículos
+   (.verse-text) e o hebraico (que tem tamanho próprio, maior por legibilidade da
+   vocalização). Regras SEM @layer de propósito: estilos não-camadados vencem as
+   utilities do Tailwind (text-[15px]/text-[17px]) na cascata. 'md' é o default
+   já expresso nas utilities, então não precisa de regra. */
+[data-fontsize='sm'] .verse-text {
+  font-size: 13px;
+}
+[data-fontsize='sm'] .verse-text .font-hebrew {
+  font-size: 15px;
+}
+[data-fontsize='lg'] .verse-text {
+  font-size: 17px;
+}
+[data-fontsize='lg'] .verse-text .font-hebrew {
+  font-size: 20px;
+}
+[data-fontsize='xl'] .verse-text {
+  font-size: 19px;
+}
+[data-fontsize='xl'] .verse-text .font-hebrew {
+  font-size: 23px;
+}
+
 /* Respeita quem pede menos movimento (SO/navegador): neutraliza animações e
    transições, inclusive o realce de versículo. Acessibilidade (WCAG 2.3.3) e
    conforto vestibular. */

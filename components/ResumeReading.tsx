@@ -14,6 +14,8 @@ import Link from 'next/link';
 interface Last {
   osis: string;
   chapter: number;
+  /** último versículo visível (opcional — gravações antigas não têm). */
+  verse?: number;
 }
 
 export function ResumeReading({ bookNames }: { bookNames: Record<string, string> }) {
@@ -25,7 +27,11 @@ export function ResumeReading({ bookNames }: { bookNames: Record<string, string>
       if (!raw) return;
       const p = JSON.parse(raw) as Partial<Last>;
       if (p && typeof p.osis === 'string' && Number.isInteger(p.chapter)) {
-        setLast({ osis: p.osis, chapter: p.chapter as number });
+        setLast({
+          osis: p.osis,
+          chapter: p.chapter as number,
+          verse: Number.isInteger(p.verse) && (p.verse as number) > 1 ? (p.verse as number) : undefined,
+        });
       }
     } catch {
       /* localStorage indisponível / JSON inválido — sem retomada */
@@ -34,9 +40,12 @@ export function ResumeReading({ bookNames }: { bookNames: Record<string, string>
 
   if (!last || !bookNames[last.osis]) return null;
 
+  // ?goto rola até o versículo salvo e o realça (mecanismo já existente do leitor).
+  const href = `/compare/${last.osis}/${last.chapter}${last.verse ? `?goto=${last.verse}` : ''}`;
+
   return (
     <Link
-      href={`/compare/${last.osis}/${last.chapter}`}
+      href={href}
       className="mb-6 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 transition hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-900/15 dark:hover:bg-amber-900/25"
     >
       <span
@@ -51,6 +60,7 @@ export function ResumeReading({ bookNames }: { bookNames: Record<string, string>
         </p>
         <p className="truncate font-semibold">
           {bookNames[last.osis]} {last.chapter}
+          {last.verse ? <span className="font-normal text-neutral-500 dark:text-neutral-400">:{last.verse}</span> : null}
         </p>
       </div>
       <span aria-hidden className="shrink-0 text-amber-700 dark:text-amber-400">

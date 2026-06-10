@@ -45,7 +45,12 @@ function matches(pathname: string, href: string): boolean {
  * para o AppShell decidir, no mesmo lugar, se reserva o espaço da nav.
  */
 export function isAppChromeHidden(pathname: string): boolean {
-  return pathname === '/login' || pathname === '/share' || pathname.startsWith('/share/');
+  return (
+    pathname === '/login' ||
+    pathname === '/share' ||
+    pathname.startsWith('/share/') ||
+    pathname.startsWith('/auth/') // telas focadas de autenticação (ex.: nova senha)
+  );
 }
 
 export function BottomNav() {

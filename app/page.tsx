@@ -1,7 +1,9 @@
 import { AccountBadge } from '@/components/AccountBadge';
 import { ActivityCard, type Activity } from '@/components/ActivityCard';
 import { ResumeReading } from '@/components/ResumeReading';
+import { TodayPlanCard } from '@/components/TodayPlanCard';
 import { getBooks } from '@/lib/corpus';
+import { getTodayReading } from '@/lib/reading-progress';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +47,7 @@ const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
 ];
 
 export default async function HomePage() {
-  const books = await getBooks();
+  const [books, today] = await Promise.all([getBooks(), getTodayReading()]);
   const bookNames: Record<string, string> = Object.fromEntries(books.map((b) => [b.osis_code, b.name_pt]));
 
   return (
@@ -59,6 +61,8 @@ export default async function HomePage() {
       </header>
 
       <ResumeReading bookNames={bookNames} />
+
+      {today && <TodayPlanCard today={today} bookNames={bookNames} />}
 
       <div className="flex flex-col gap-8">
         {SECTIONS.map((section) => (

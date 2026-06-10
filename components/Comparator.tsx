@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Book, Token } from '@/lib/corpus';
@@ -19,11 +20,29 @@ import { ReaderHelp } from './ReaderHelp';
 import type { ReferenceInput } from '@/app/study/actions';
 import type { Annotation } from '@/lib/annotations';
 import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
+import {
+  DEFAULT_FONT_SIZE,
+  FONT_SIZES,
+  loadFontSize,
+  saveFontSize,
+  type ReaderFontSize,
+} from '@/lib/reader-prefs';
 
 const TESTAMENT_LABELS: Record<string, string> = {
   NT: 'Novo Testamento',
   OT: 'Antigo Testamento',
 };
+
+// Altura aproximada do header fixo de 2 linhas, em px. Compartilhada entre o
+// rootMargin do observer de versículo e o scroll-mt dos versículos — se o header
+// mudar de altura, ajustar aqui (e o scroll-mt-20 nas linhas de versículo).
+const HEADER_OFFSET_PX = 80;
+
+// Validação única do parâmetro ?goto (versículo de destino): inteiro positivo.
+function parseGoto(raw: string | null): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 // Fecha um sheet/modal ao pressionar Escape. `aria-modal` promete que o fundo é
 // inerte; o Escape entrega a saída por teclado esperada de um diálogo.
@@ -393,8 +412,32 @@ export function Comparator({
   const [annotationVerse, setAnnotationVerse] = useState<number | null>(null);
   // Versículo cujas referências cruzadas (TSK) estão abertas (toque no número).
   const [crossRefVerse, setCrossRefVerse] = useState<number | null>(null);
+  // Tamanho da fonte de leitura (preferência Aa). Começa no default no SSR e
+  // assume o valor salvo após a montagem — evita divergência de hidratação.
+  const [fontSize, setFontSize] = useState<ReaderFontSize>(DEFAULT_FONT_SIZE);
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  useEffect(() => {
+    setFontSize(loadFontSize());
+  }, []);
+
+  // Esc fecha o popover de fonte (consistente com os sheets).
+  useEffect(() => {
+    if (!fontMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFontMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fontMenuOpen]);
+
+  const pickFontSize = (size: ReaderFontSize) => {
+    setFontSize(size);
+    saveFontSize(size);
+    setFontMenuOpen(false);
+  };
 
   // Índice versículo → anotações que o cobrem (faixa verse_start..verse_end), para
   // marcar no comparador e abrir a folha de leitura ao tocar no marcador. Memoizado
@@ -416,18 +459,88 @@ export function Comparator({
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
   }, []);
 
-  // Memória do "último lido": ao abrir /compare sem rota, o redirector usa isto
-  // para retomar o livro/capítulo onde o usuário parou (em vez de João 1 fixo).
+  // Versículo "atual" da leitura: o mais alto (menor número) que cruza a faixa
+  // superior da viewport. Alimenta a retomada exata ("Continuar lendo" → ?goto)
+  // e o chip flutuante de posição. IntersectionObserver com rootMargin que
+  // desconta o header fixo e ignora o terço inferior da tela (viés para o topo).
+  const [currentVerse, setCurrentVerse] = useState<number | null>(null);
+  // Estado do auto-hide do header e do chip flutuante (efeito de scroll abaixo).
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const [scrolledFar, setScrolledFar] = useState(false);
+
+  // O Comparator NÃO remonta na navegação client-side entre capítulos (mesma
+  // posição na árvore) — estado sobreviveria à troca. Reset SÍNCRONO durante o
+  // render (padrão "adjusting state during render"): aplica antes de qualquer
+  // efeito, então o efeito de persistência nunca vê o versículo do capítulo
+  // anterior pareado com o capítulo novo, e o header reaparece no capítulo novo.
+  const chapterKey = `${book.osis_code}:${number}`;
+  const [prevChapterKey, setPrevChapterKey] = useState(chapterKey);
+  if (prevChapterKey !== chapterKey) {
+    setPrevChapterKey(chapterKey);
+    setCurrentVerse(null);
+    setHeaderHidden(false);
+  }
+
+  useEffect(() => {
+    const visible = new Set<number>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const v = Number(e.target.id.slice(1));
+          if (!Number.isInteger(v) || v < 1) continue;
+          if (e.isIntersecting) visible.add(v);
+          else visible.delete(v);
+        }
+        if (visible.size > 0) setCurrentVerse(Math.min(...visible));
+      },
+      { rootMargin: `-${HEADER_OFFSET_PX}px 0px -55% 0px` },
+    );
+    for (const row of rows) {
+      if (row.verse < 1) continue; // v0 = título de salmo, não conta posição
+      const el = document.getElementById(`v${row.verse}`);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [rows]);
+
+  // Rastreio de rolagem (um listener só, com rAF): direção alimenta o auto-hide
+  // do header (esconde ao descer, volta ao subir — leitura imersiva) e a distância
+  // alimenta o chip flutuante de posição. Histerese de 8px evita tremedeira; perto
+  // do topo o header nunca esconde.
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const dy = y - lastY;
+        if (y < 120) setHeaderHidden(false);
+        else if (dy > 8) setHeaderHidden(true);
+        else if (dy < -8) setHeaderHidden(false);
+        setScrolledFar(y > window.innerHeight);
+        lastY = y;
+        ticking = false;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Memória do "último lido": livro/capítulo/versículo. O redirector de /compare
+  // e o card "Continuar lendo" da home usam isto para retomar a leitura no lugar
+  // exato (?goto), não só no capítulo.
   useEffect(() => {
     try {
       window.localStorage.setItem(
         'koine:compare:last',
-        JSON.stringify({ osis: book.osis_code, chapter: number }),
+        JSON.stringify({ osis: book.osis_code, chapter: number, verse: currentVerse ?? undefined }),
       );
     } catch {
       // localStorage indisponível (modo privado/SSR) — apenas não persiste.
     }
-  }, [book.osis_code, number]);
+  }, [book.osis_code, number, currentVerse]);
 
   const codes = translations.map((t) => t.code);
   const codesKey = codes.join(',');
@@ -460,7 +573,10 @@ export function Comparator({
         (c): c is string => typeof c === 'string' && allTranslations.some((t) => t.code === c),
       );
       if (saved.length > 0 && saved.join(',') !== codesKey) {
-        router.replace(compareHref(book.osis_code, number, saved));
+        // Preserva um ?goto pendente (ex.: "Continuar lendo" chega sem ?v mas com
+        // goto) — sem isso o replace descartaria a rolagem até o versículo salvo.
+        const goto = parseGoto(searchParams.get('goto'));
+        router.replace(compareHref(book.osis_code, number, saved, goto ?? undefined));
       }
     } catch {
       // localStorage/JSON inválido — mantém o padrão.
@@ -513,10 +629,8 @@ export function Comparator({
   // (mount→cleanup→mount cancela o 1º timer e o 2º mount abortaria).
   const lastGoto = useRef<number | null>(null);
   useEffect(() => {
-    const raw = searchParams.get('goto');
-    if (!raw) return;
-    const verse = Number(raw);
-    if (!Number.isInteger(verse) || lastGoto.current === verse) return;
+    const verse = parseGoto(searchParams.get('goto'));
+    if (verse == null || lastGoto.current === verse) return;
 
     let tries = 0;
     let timer = 0;
@@ -560,7 +674,13 @@ export function Comparator({
 
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/90 px-4 py-2.5 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
+      {/* Auto-hide: esconde ao rolar para baixo (leitura imersiva), reaparece ao
+          subir. Forçado visível com seleção ativa ou popover de fonte aberto. */}
+      <header
+        className={`sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/90 px-4 py-2.5 backdrop-blur transition-transform duration-300 dark:border-neutral-800 dark:bg-neutral-950/90 ${
+          headerHidden && !selectMode && !fontMenuOpen ? '-translate-y-full' : ''
+        }`}
+      >
         {/* Linha 1 — navegação: voltar + navegador de capítulo centralizado (‹ título ›). */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <Link href="/" className="justify-self-start text-sm text-neutral-500 transition hover:text-neutral-700 dark:hover:text-neutral-300">
@@ -643,13 +763,58 @@ export function Comparator({
           >
             Versões ({translations.length})
           </button>
-          <div className="ml-auto">
+          <div className="relative ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setFontMenuOpen((o) => !o)}
+              aria-label="Tamanho da fonte"
+              aria-expanded={fontMenuOpen}
+              className="rounded-md px-2 py-1 font-serif text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+            >
+              Aa
+            </button>
             <ReaderHelp />
+
+            {/* Popover de tamanho de fonte: opções com pré-visualização do tamanho.
+                O backdrop de fechamento vai por PORTAL ao body — dentro do header
+                (backdrop-blur) um fixed ficaria confinado à caixa do header. */}
+            {fontMenuOpen && (
+              <>
+                {typeof document !== 'undefined' &&
+                  createPortal(
+                    <button
+                      type="button"
+                      aria-label="Fechar"
+                      onClick={() => setFontMenuOpen(false)}
+                      className="fixed inset-0 z-20 cursor-default"
+                    />,
+                    document.body,
+                  )}
+                <div className="absolute right-0 top-full z-30 mt-2 w-44 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+                  {FONT_SIZES.map((s, i) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      onClick={() => pickFontSize(s.value)}
+                      aria-pressed={fontSize === s.value}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
+                        fontSize === s.value
+                          ? 'bg-amber-50 font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'
+                          : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800'
+                      }`}
+                    >
+                      <span style={{ fontSize: 12 + i * 2 }}>{s.label}</span>
+                      {fontSize === s.value && <span aria-hidden>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
 
-      <main className={`px-4 py-5 ${selectMode ? 'pb-24' : ''}`}>
+      <main data-fontsize={fontSize} className={`px-4 py-5 ${selectMode ? 'pb-24' : ''}`}>
         {/* Cabeçalho de colunas (só desktop): nomes das versões alinhados às colunas. */}
         <div className="mb-2 hidden sm:grid sm:gap-4" style={gridStyle}>
           {translations.map((t) => (
@@ -724,7 +889,7 @@ export function Comparator({
                       <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 sm:hidden">
                         {t.name}
                       </span>
-                      <p className="flex items-start gap-1.5 text-[15px] leading-relaxed">
+                      <p className="verse-text flex items-start gap-1.5 text-[15px] leading-relaxed">
                         {row.verse === 0 ? (
                           <span className="mt-0.5 select-none text-xs font-semibold text-neutral-500 dark:text-neutral-400">
                             tít.
@@ -779,6 +944,19 @@ export function Comparator({
 
         <Attributions translations={translations} />
       </main>
+
+      {/* Chip flutuante de posição: mostra o versículo atual em capítulos longos e
+          abre o seletor (já posicionado no capítulo, com a grade de versículos). */}
+      {scrolledFar && currentVerse != null && !selectMode && (
+        <button
+          type="button"
+          onClick={() => setNavOpen(true)}
+          aria-label={`Você está no versículo ${currentVerse} — pular para outro versículo`}
+          className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] right-4 z-30 rounded-full border border-neutral-200 bg-white/95 px-3.5 py-2 text-sm font-semibold text-neutral-700 shadow-lg backdrop-blur transition hover:border-amber-300 hover:text-amber-700 dark:border-neutral-700 dark:bg-neutral-900/95 dark:text-neutral-200 dark:hover:border-amber-700 dark:hover:text-amber-400"
+        >
+          v. {currentVerse}
+        </button>
+      )}
 
       {navOpen && (
         <NavSheet

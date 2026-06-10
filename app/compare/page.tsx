@@ -15,13 +15,17 @@ export default function CompareIndexPage() {
 
   useEffect(() => {
     let path = FALLBACK;
-    let query = '';
+    const params = new URLSearchParams();
     try {
       const raw = window.localStorage.getItem('koine:compare:last');
       if (raw) {
-        const last = JSON.parse(raw) as { osis?: unknown; chapter?: unknown };
+        const last = JSON.parse(raw) as { osis?: unknown; chapter?: unknown; verse?: unknown };
         if (typeof last.osis === 'string' && Number.isInteger(last.chapter)) {
           path = `/compare/${last.osis}/${last.chapter as number}`;
+          // Retomada exata: rola até o último versículo visível (mecanismo ?goto).
+          if (Number.isInteger(last.verse) && (last.verse as number) > 1) {
+            params.set('goto', String(last.verse));
+          }
         }
       }
       // Versões preferidas: retoma a última seleção (evita o flash de cair no padrão
@@ -29,12 +33,13 @@ export default function CompareIndexPage() {
       const v = JSON.parse(window.localStorage.getItem('koine:compare:versions') ?? 'null') as unknown;
       if (Array.isArray(v)) {
         const codes = v.filter((c): c is string => typeof c === 'string');
-        if (codes.length > 0) query = `?v=${codes.join(',')}`;
+        if (codes.length > 0) params.set('v', codes.join(','));
       }
     } catch {
       // localStorage indisponível ou JSON corrompido — usa o fallback.
     }
-    router.replace(`${path}${query}`);
+    const query = params.toString();
+    router.replace(query ? `${path}?${query}` : path);
   }, [router]);
 
   return (
