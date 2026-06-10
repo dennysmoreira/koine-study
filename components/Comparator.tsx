@@ -1012,10 +1012,15 @@ export function Comparator({
 
       {crossRefVerse != null && (
         <CrossRefsSheet
+          // key por identidade do versículo: trocar de versículo com o sheet aberto
+          // REMONTA o componente — sem isso, openIdx/previews do versículo anterior
+          // vazariam para a lista nova (preview errado sob a referência errada).
+          key={`${book.osis_code}-${number}-${crossRefVerse}`}
           osis={book.osis_code}
           bookName={book.name_pt}
           chapter={number}
           verse={crossRefVerse}
+          previewCode={translations.find((t) => !t.is_original)?.code ?? null}
           onClose={() => setCrossRefVerse(null)}
         />
       )}

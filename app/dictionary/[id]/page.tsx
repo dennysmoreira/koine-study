@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getDictionaryEntry } from '@/lib/dictionary';
 import { transliterate } from '@/lib/transliterate';
+import { SpeakButton } from '@/components/SpeakButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,13 +40,23 @@ export default async function DictionaryEntryPage({ params }: { params: { id: st
             <h1 dir="rtl" className="font-hebrew text-5xl leading-none">
               {entry.lemma}
             </h1>
-            {entry.xlit && <p className="mt-3 text-sm italic text-neutral-400">{entry.xlit}</p>}
-            {entry.pron && <p className="text-xs text-neutral-400">/{entry.pron}/</p>}
+            <div className="mt-3 flex items-center gap-2">
+              {entry.xlit && <p className="text-sm italic text-neutral-400">{entry.xlit}</p>}
+              {entry.pron && <p className="text-xs text-neutral-400">/{entry.pron}/</p>}
+              {/* sem voz hebraica instalada o fallback fala a romanização — sem
+                  pron/xlit não haveria o que falar, então o botão nem aparece. */}
+              {(entry.pron || entry.xlit) && (
+                <SpeakButton text={entry.lemma} romanized={entry.pron ?? entry.xlit ?? ''} lang="hbo" />
+              )}
+            </div>
           </>
         ) : (
           <>
             <h1 className="font-greek text-4xl leading-none">{entry.lemma}</h1>
-            <p className="mt-2 text-sm italic text-neutral-400">{transliterate(entry.lemma)}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <p className="text-sm italic text-neutral-400">{transliterate(entry.lemma)}</p>
+              <SpeakButton text={entry.lemma} romanized={transliterate(entry.lemma)} lang="grc" />
+            </div>
           </>
         )}
         {entry.gloss_pt && <p className="mt-3 text-lg">{entry.gloss_pt}</p>}

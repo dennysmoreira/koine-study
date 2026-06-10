@@ -212,3 +212,66 @@ export const getParallelChapter = unstable_cache(
   ['translations:chapter'],
   TRANSLATIONS_CACHE,
 );
+
+// ── Preview de passagem (referências cruzadas) ──────────────────────────────
+
+export interface VersePreview {
+  /** nome da versão usada no preview (ex.: "Bíblia Livre"). */
+  translationName: string;
+  /** texto corrido com os números: "16 Porque Deus... 17 Porque Deus não...". */
+  text: string;
+  /** true quando a faixa pedida foi cortada (faixas longas mostram só o início). */
+  truncated: boolean;
+}
+
+// Teto de versículos no preview: faixas TSK longas (ex.: 10 versos) mostram só o
+// início — o objetivo é orientar a navegação, não substituir a leitura.
+const PREVIEW_MAX_VERSES = 4;
+
+/**
+ * Texto de uma pequena faixa de versículos numa versão NÃO-original (para o
+ * preview das referências cruzadas). `preferredCode` é a versão que o usuário tem
+ * aberta no comparador; caindo para a primeira tradução do catálogo se for
+ * original/desconhecida. As traduções vivem no eixo de display, então o par
+ * (chapter, verse) consulta direto. Retorna null se nada existir.
+ */
+async function fetchVersePreview(
+  osis: string,
+  chapter: number,
+  verseStart: number,
+  verseEnd: number,
+  preferredCode: string | null,
+): Promise<VersePreview | null> {
+  const [book, catalog] = await Promise.all([getBookByOsis(osis), getTranslations()]);
+  if (!book) return null;
+
+  const preferred = preferredCode ? catalog.find((t) => t.code === preferredCode) : null;
+  const translation =
+    preferred && !preferred.is_original ? preferred : catalog.find((t) => !t.is_original) ?? null;
+  if (!translation) return null;
+
+  const last = Math.min(verseEnd, verseStart + PREVIEW_MAX_VERSES - 1);
+  const { data, error } = await supabase
+    .from('verse_texts')
+    .select('verse,text')
+    .eq('book_id', book.id)
+    .eq('translation_code', translation.code)
+    .eq('chapter', chapter)
+    .gte('verse', verseStart)
+    .lte('verse', last)
+    .order('verse');
+  if (error) throw new Error(`getVersePreview: ${error.message}`);
+
+  const rows = (data ?? []) as Array<{ verse: number; text: string }>;
+  if (rows.length === 0) return null;
+
+  const single = verseStart === verseEnd;
+  const text = rows.map((r) => (single ? r.text : `${r.verse} ${r.text}`)).join(' ');
+  return { translationName: translation.name, text, truncated: last < verseEnd };
+}
+
+export const getVersePreview = unstable_cache(
+  fetchVersePreview,
+  ['translations:verse-preview'],
+  TRANSLATIONS_CACHE,
+);

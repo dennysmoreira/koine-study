@@ -2,7 +2,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { getLexiconEntries, getAbbottSmith, getBookByOsis, getBooks, type LexiconEntry } from '@/lib/corpus';
-import { getTranslations } from '@/lib/translations';
+import { getTranslations, getVersePreview, type VersePreview } from '@/lib/translations';
 import { originalToDisplay, originalChapterWindow } from '@/lib/versification';
 import { getCrossReferences, type CrossRef } from '@/lib/cross-references';
 
@@ -17,6 +17,25 @@ export async function getVerseCrossReferences(
 ): Promise<CrossRef[]> {
   if (!osis || !Number.isInteger(chapter) || !Number.isInteger(verse)) return [];
   return getCrossReferences(osis, chapter, verse);
+}
+
+/**
+ * Preview do texto de uma referência cruzada (pequena faixa de versículos numa
+ * tradução), buscado sob demanda quando o usuário expande um item no sheet —
+ * evita navegar "às cegas" só para descobrir o que a passagem diz. Leitura
+ * cacheada (corpus imutável); validação na borda (action é chamável de fora).
+ */
+export async function fetchVersePreview(
+  osis: string,
+  chapter: number,
+  verseStart: number,
+  verseEnd: number,
+  preferredCode?: string | null,
+): Promise<VersePreview | null> {
+  if (!osis || !Number.isInteger(chapter) || chapter < 1) return null;
+  if (!Number.isInteger(verseStart) || verseStart < 1) return null;
+  const end = Number.isInteger(verseEnd) && verseEnd >= verseStart ? verseEnd : verseStart;
+  return getVersePreview(osis, chapter, verseStart, end, preferredCode ?? null);
 }
 
 export interface BookOption {

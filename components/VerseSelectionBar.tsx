@@ -124,11 +124,13 @@ export function VerseSelectionBar({
   return (
     <>
       <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
-        <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
-          <span className="text-sm font-medium">
-            {count} versículo{count > 1 ? 's' : ''} selecionado{count > 1 ? 's' : ''}
-          </span>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {/* Linha 1: contagem + Limpar. Linha 2: grade 2×2 no mobile (a ação
+            primária ✨ ocupa a linha inteira); inline no desktop. */}
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">
+              {count} versículo{count > 1 ? 's' : ''} selecionado{count > 1 ? 's' : ''}
+            </span>
             <button
               type="button"
               onClick={onClear}
@@ -136,6 +138,8 @@ export function VerseSelectionBar({
             >
               Limpar
             </button>
+          </div>
+          <div className="mt-1 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             <button
               type="button"
               onClick={() => {
@@ -160,7 +164,7 @@ export function VerseSelectionBar({
               type="button"
               onClick={() => createWith(true)}
               disabled={pending}
-              className="min-h-[44px] rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
+              className="col-span-2 min-h-[44px] rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60 sm:col-span-1"
             >
               <span aria-hidden>✨</span> Explicar com IA
             </button>

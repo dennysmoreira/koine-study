@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import type { LexiconEntry } from '@/lib/corpus';
 import type { ChapterLemma, LeanToken } from '@/lib/chapter-view';
 import { glossLabel, parsingLabel, posLabel } from '@/lib/morph-labels';
-import { phoneticPtBR, transliterate } from '@/lib/transliterate';
+import { transliterate } from '@/lib/transliterate';
 import { fetchLexicon } from '@/app/compare/actions';
+import { SpeakButton } from '@/components/SpeakButton';
 
 // Rótulos legíveis por fonte de léxico (coluna `lexicon_entries.source` +
 // 'abbott_smith', injetado pela action a partir de `lemmas.abbott_smith`).
@@ -15,44 +16,6 @@ const LEXICON_LABELS: Record<string, string> = {
   thayers: "Thayer's",
   moulton_milligan: 'Moulton-Milligan',
 };
-
-// Áudio via Web Speech API (nativa, sem dependência).
-// - Se houver voz grega (`el-*`) instalada, fala o grego — fonética moderna
-//   (iotacismo), diverge da transliteração erasmiana, mas é a leitura nativa.
-// - Sem voz grega, falar grego com `lang='el-GR'` deixa o Chrome MUDO; então
-//   caímos para a transliteração (latim) lida pela voz padrão, garantindo som.
-function speak(surface: string, romanized: string) {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  const synth = window.speechSynthesis;
-
-  const run = () => {
-    const voices = synth.getVoices();
-    const greek = voices.find((v) => v.lang?.toLowerCase().startsWith('el'));
-    const fallback = voices.find((v) => v.default) ?? voices[0];
-    const voice = greek ?? fallback;
-    // Com voz grega, fala o grego nativo. Sem ela, fala a romanização — e, se a
-    // voz padrão for portuguesa, usa a respelagem fonética para corrigir g/c/s.
-    let text = surface;
-    if (!greek) {
-      text = voice?.lang?.toLowerCase().startsWith('pt') ? phoneticPtBR(romanized) : romanized;
-    }
-    const utter = new SpeechSynthesisUtterance(text);
-    if (voice) {
-      utter.voice = voice;
-      utter.lang = voice.lang;
-    }
-    utter.rate = 0.85;
-    synth.cancel();
-    synth.speak(utter);
-  };
-
-  // Vozes carregam de forma assíncrona; na 1ª chamada getVoices() pode vir vazio.
-  if (synth.getVoices().length === 0) {
-    synth.addEventListener('voiceschanged', run, { once: true });
-  } else {
-    run();
-  }
-}
 
 // Painel inferior com os dados linguísticos de um token grego: superfície,
 // Strong's, pronúncia (transliteração + áudio), lema, glosa, análise morfológica
@@ -128,22 +91,7 @@ export function TokenSheet({
           <p className="text-base italic text-neutral-400" aria-label="Pronúncia">
             {romanized}
           </p>
-          <button
-            type="button"
-            onClick={() => speak(token.surface, romanized)}
-            aria-label="Ouvir pronúncia"
-            className="rounded-full p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="h-4 w-4"
-              aria-hidden="true"
-            >
-              <path d="M13 4.06a1 1 0 0 0-1.6-.8L6.67 7H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2.67l4.73 3.74A1 1 0 0 0 13 19.94zM16.5 8.5a1 1 0 0 1 1.41 0A4.98 4.98 0 0 1 19.5 12a4.98 4.98 0 0 1-1.59 3.5 1 1 0 1 1-1.32-1.5A2.98 2.98 0 0 0 17.5 12a2.98 2.98 0 0 0-.99-2 1 1 0 0 1-.01-1.5zM19.07 5.93a1 1 0 0 1 1.41 0A8.96 8.96 0 0 1 23 12a8.96 8.96 0 0 1-2.52 6.07 1 1 0 0 1-1.46-1.36A6.96 6.96 0 0 0 21 12a6.96 6.96 0 0 0-1.93-4.71 1 1 0 0 1 0-1.36z" />
-            </svg>
-          </button>
+          <SpeakButton text={token.surface} romanized={romanized} lang="grc" />
         </div>
 
         {lemma && (
