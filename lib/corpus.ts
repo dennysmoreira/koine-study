@@ -72,14 +72,12 @@ async function fetchBooks(): Promise<Book[]> {
 
 export const getBooks = unstable_cache(fetchBooks, ['corpus:books'], CORPUS_CACHE);
 
+// Resolve pelo catálogo CACHEADO (getBooks) em vez de uma query própria: este
+// helper roda várias vezes por carga de capítulo (corpus, hebraico, estudo) e a
+// versão com query batia no Supabase a cada chamada, sem cache.
 export async function getBookByOsis(osis: string): Promise<Book | null> {
-  const { data, error } = await supabase
-    .from('books')
-    .select('id,osis_code,name_pt,name_grc,testament,sort_order')
-    .eq('osis_code', osis)
-    .maybeSingle();
-  if (error) throw new Error(`getBookByOsis: ${error.message}`);
-  return (data as Book | null) ?? null;
+  const books = await getBooks();
+  return books.find((b) => b.osis_code === osis) ?? null;
 }
 
 // lista de capítulos existentes para um livro (distintos, ordenados).
@@ -172,3 +170,22 @@ async function fetchLexiconEntries(strongs: string): Promise<LexiconEntry[]> {
 }
 
 export const getLexiconEntries = unstable_cache(fetchLexiconEntries, ['corpus:lexicon'], CORPUS_CACHE);
+
+// Abbott-Smith do lema, sob demanda (mesmo racional dos léxicos acima): o texto é
+// longo e NÃO viaja no payload do capítulo — o TokenSheet busca ao abrir, junto
+// com LSJ etc. Chaveado por Strong's (estável entre rebuilds).
+async function fetchAbbottSmith(strongs: string): Promise<string | null> {
+  // .order('id') torna a escolha DETERMINÍSTICA entre homógrafos que compartilham
+  // o Strong's (sem ordem explícita o Postgres não garante qual linha vem 1ª).
+  const { data, error } = await supabase
+    .from('lemmas')
+    .select('abbott_smith')
+    .eq('strongs', strongs)
+    .not('abbott_smith', 'is', null)
+    .order('id')
+    .limit(1);
+  if (error) throw new Error(`getAbbottSmith: ${error.message}`);
+  return ((data ?? [])[0] as { abbott_smith: string | null } | undefined)?.abbott_smith ?? null;
+}
+
+export const getAbbottSmith = unstable_cache(fetchAbbottSmith, ['corpus:abbott'], CORPUS_CACHE);

@@ -1,6 +1,6 @@
 'use client';
 
-import type { HebrewWord } from '@/lib/hebrew';
+import type { LeanHebrewWord } from '@/lib/chapter-view';
 
 // Renderiza o versículo hebraico como TEXTO CORRIDO (RTL), espelhando o
 // GreekVerse: as palavras fluem da direita para a esquerda e cada uma é
@@ -13,8 +13,8 @@ export function HebrewVerse({
   onSelect,
   activePosition,
 }: {
-  words: HebrewWord[];
-  onSelect: (w: HebrewWord) => void;
+  words: LeanHebrewWord[];
+  onSelect: (w: LeanHebrewWord) => void;
   activePosition: number | null;
 }) {
   return (

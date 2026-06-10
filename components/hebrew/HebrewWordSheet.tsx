@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import type { HebrewWord } from '@/lib/hebrew';
+import type { HebrewLexemeInfo, LeanHebrewWord } from '@/lib/chapter-view';
 import { decodeHebrewMorpheme, hebrewParsingLabel } from '@/lib/hebrew-morph';
 
 // Painel inferior com os dados linguísticos de uma palavra hebraica. Diferente do
@@ -11,7 +11,18 @@ import { decodeHebrewMorpheme, hebrewParsingLabel } from '@/lib/hebrew-morph';
 // OSHM e glosa (em PT quando traduzida; cai para EN enquanto não). Os códigos
 // OSHM já vêm com o prefixo de língua (H/A), logo cada morfema se autodecodifica
 // (lib/hebrew-morph.ts) — o banco fica enxuto e os rótulos têm fonte única.
-export function HebrewWordSheet({ word, onClose }: { word: HebrewWord; onClose: () => void }) {
+// Os dados de léxico (forma, xlit, pronúncia, glosa, BDB) vêm do ÍNDICE do
+// capítulo (lexicon, chaveado por Strong's), não embutidos por morfema —
+// deduplicação do payload (chapter-view).
+export function HebrewWordSheet({
+  word,
+  lexicon,
+  onClose,
+}: {
+  word: LeanHebrewWord;
+  lexicon: Record<string, HebrewLexemeInfo>;
+  onClose: () => void;
+}) {
   // Fecha ao pressionar Escape — saída por teclado esperada de um diálogo.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -47,6 +58,7 @@ export function HebrewWordSheet({ word, onClose }: { word: HebrewWord; onClose: 
           {word.morphemes.map((m, i) => {
             const features = decodeHebrewMorpheme(m.code);
             const parsing = m.code ? hebrewParsingLabel(features) : null;
+            const lex = m.strongs ? lexicon[m.strongs] ?? null : null;
             return (
               <li
                 key={i}
@@ -59,29 +71,29 @@ export function HebrewWordSheet({ word, onClose }: { word: HebrewWord; onClose: 
                   {m.strongs && <span className="text-xs text-neutral-400">Strong {m.strongs}</span>}
                 </div>
 
-                {(m.xlit || m.pron) && (
+                {(lex?.xlit || lex?.pron) && (
                   <p className="mt-1 text-sm text-neutral-500">
-                    {m.xlit && (
-                      <span className="italic text-neutral-700 dark:text-neutral-200">{m.xlit}</span>
+                    {lex.xlit && (
+                      <span className="italic text-neutral-700 dark:text-neutral-200">{lex.xlit}</span>
                     )}
-                    {m.pron && <span className="ml-2 text-neutral-400">/{m.pron}/</span>}
+                    {lex.pron && <span className="ml-2 text-neutral-400">/{lex.pron}/</span>}
                   </p>
                 )}
 
-                {(m.lemmaForm || m.lemmaRaw) && (
+                {(lex?.form || m.lemmaRaw) && (
                   <p className="mt-1 text-sm text-neutral-500">
                     Lema:{' '}
                     <span dir="rtl" className="font-hebrew text-base text-neutral-700 dark:text-neutral-200">
-                      {m.lemmaForm ?? m.lemmaRaw}
+                      {lex?.form ?? m.lemmaRaw}
                     </span>
                   </p>
                 )}
 
-                {m.gloss && <p className="mt-1 text-base font-medium">{m.gloss}</p>}
+                {lex?.gloss && <p className="mt-1 text-base font-medium">{lex.gloss}</p>}
 
-                {m.bdbDef && (
+                {lex?.bdbDef && (
                   <p className="mt-1 text-sm leading-snug text-neutral-600 dark:text-neutral-300">
-                    <span className="text-neutral-400">BDB:</span> {m.bdbDef}
+                    <span className="text-neutral-400">BDB:</span> {lex.bdbDef}
                   </p>
                 )}
 

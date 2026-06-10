@@ -1,7 +1,7 @@
 'use server';
 
 import { supabase } from '@/lib/supabase';
-import { getLexiconEntries, getBookByOsis, getBooks, type LexiconEntry } from '@/lib/corpus';
+import { getLexiconEntries, getAbbottSmith, getBookByOsis, getBooks, type LexiconEntry } from '@/lib/corpus';
 import { getTranslations } from '@/lib/translations';
 import { originalToDisplay, originalChapterWindow } from '@/lib/versification';
 import { getCrossReferences, type CrossRef } from '@/lib/cross-references';
@@ -33,14 +33,16 @@ export async function listBooks(): Promise<BookOption[]> {
 }
 
 // Server Action chamada pelo comparador unificado (client component) ao abrir o
-// painel de um token grego. As entradas LSJ são grandes (mediana ~200, máx ~16 KB
-// de texto), então NÃO viajam no payload do capítulo — são buscadas sob demanda,
-// chaveadas pelo Strong's do lema (estável entre rebuilds). `getLexiconEntries` já
-// é cacheada no Data Cache do Next (tag 'corpus'), então repetições vêm do cache.
+// painel de um token grego. Entradas de léxico são grandes (LSJ: mediana ~200,
+// máx ~16 KB; Abbott-Smith também é texto longo), então NÃO viajam no payload do
+// capítulo — são buscadas sob demanda, chaveadas pelo Strong's do lema (estável
+// entre rebuilds). Ambas as leituras são cacheadas no Data Cache (tag 'corpus').
+// O Abbott-Smith entra como primeira "fonte" da pilha de léxicos do painel.
 export async function fetchLexicon(strongs: string): Promise<LexiconEntry[]> {
   const key = strongs.trim();
   if (!key) return [];
-  return getLexiconEntries(key);
+  const [abbott, entries] = await Promise.all([getAbbottSmith(key), getLexiconEntries(key)]);
+  return abbott ? [{ source: 'abbott_smith', text_en: abbott, text_pt: null }, ...entries] : entries;
 }
 
 // Capítulos existentes de um livro (distintos, ordenados). Alimenta a cascata

@@ -1,7 +1,18 @@
 // Traduz os valores morfológicos (inglês, vindos do morph-decoder do ETL) para PT-BR
 // e monta a análise legível exibida ao tocar num token no leitor interlinear.
 
-import type { Token } from './corpus';
+// Tipo ESTRUTURAL (só os campos m_*): aceita tanto o Token rico do corpus quanto
+// o LeanToken da fronteira cliente (chapter-view) sem acoplar os módulos.
+export interface MorphFields {
+  m_pos: string | null;
+  m_tense: string | null;
+  m_voice: string | null;
+  m_mood: string | null;
+  m_case: string | null;
+  m_number: string | null;
+  m_gender: string | null;
+  m_person: string | null;
+}
 
 const POS: Record<string, string> = {
   noun: 'substantivo',
@@ -121,13 +132,13 @@ function label(map: Record<string, string>, value: string | null): string | null
   return map[value] ?? value;
 }
 
-export function posLabel(token: Token): string {
+export function posLabel(token: MorphFields): string {
   return label(POS, token.m_pos) ?? 'palavra';
 }
 
 // Análise morfológica legível: ex. "verbo · presente · ativo · indicativo · 3ª pessoa · plural".
 // A ordem segue a convenção de parsing grego (tempo, voz, modo, pessoa; depois caso, número, gênero).
-export function parsingLabel(token: Token): string {
+export function parsingLabel(token: MorphFields): string {
   const parts = [
     posLabel(token),
     label(TENSE, token.m_tense),
@@ -141,7 +152,12 @@ export function parsingLabel(token: Token): string {
   return parts.join(' · ');
 }
 
-// Glosa preferida em PT: contexto > léxico PT > léxico EN.
-export function glossLabel(token: Token): string | null {
-  return token.gloss_context ?? token.lemma?.gloss_pt ?? token.lemma?.gloss_en ?? null;
+// Glosa preferida em PT: contexto > léxico PT > léxico EN. O léxico vem em
+// parâmetro próprio porque o token enxuto do cliente não embute o lema (o
+// Comparator resolve via índice do capítulo).
+export function glossLabel(
+  token: { gloss_context: string | null },
+  lemma: { gloss_pt: string | null; gloss_en: string | null } | null,
+): string | null {
+  return token.gloss_context ?? lemma?.gloss_pt ?? lemma?.gloss_en ?? null;
 }

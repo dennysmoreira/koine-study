@@ -4,9 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { Book, Token } from '@/lib/corpus';
-import type { HebrewWord } from '@/lib/hebrew';
-import type { ChapterView, ChapterViewRow } from '@/lib/chapter-view';
+import type { Book } from '@/lib/corpus';
+import type { ChapterView, ChapterViewRow, LeanHebrewWord, LeanToken } from '@/lib/chapter-view';
 import type { Translation } from '@/lib/translations';
 import { GreekVerse } from './greek/GreekVerse';
 import { TokenSheet } from './greek/TokenSheet';
@@ -394,7 +393,7 @@ export function Comparator({
   allTranslations: Translation[];
   annotations: Annotation[];
 }) {
-  const { book, number, chapters, translations, rows } = chapter;
+  const { book, number, chapters, translations, rows, greekLexicon, hebrewLexicon } = chapter;
   const [navOpen, setNavOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [studyOpen, setStudyOpen] = useState(false);
@@ -403,9 +402,9 @@ export function Comparator({
   const [selectMode, setSelectMode] = useState(false);
   const [selectedVerses, setSelectedVerses] = useState<Set<number>>(new Set());
   // Token grego selecionado (abre o TokenSheet com os dados linguísticos).
-  const [selected, setSelected] = useState<{ verse: number; token: Token } | null>(null);
+  const [selected, setSelected] = useState<{ verse: number; token: LeanToken } | null>(null);
   // Palavra hebraica selecionada (abre o HebrewWordSheet, breakdown por morfema).
-  const [selectedHebrew, setSelectedHebrew] = useState<{ verse: number; word: HebrewWord } | null>(null);
+  const [selectedHebrew, setSelectedHebrew] = useState<{ verse: number; word: LeanHebrewWord } | null>(null);
   const [highlight, setHighlight] = useState<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   // Versículo cujas anotações estão abertas na folha de leitura (marcador 📝).
@@ -991,10 +990,16 @@ export function Comparator({
         />
       )}
 
-      {selected && <TokenSheet token={selected.token} onClose={() => setSelected(null)} />}
+      {selected && (
+        <TokenSheet
+          token={selected.token}
+          lemma={selected.token.lemmaKey ? greekLexicon[selected.token.lemmaKey] ?? null : null}
+          onClose={() => setSelected(null)}
+        />
+      )}
 
       {selectedHebrew && (
-        <HebrewWordSheet word={selectedHebrew.word} onClose={() => setSelectedHebrew(null)} />
+        <HebrewWordSheet word={selectedHebrew.word} lexicon={hebrewLexicon} onClose={() => setSelectedHebrew(null)} />
       )}
 
       {annotationVerse != null && (

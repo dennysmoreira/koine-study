@@ -11,7 +11,7 @@
  *
  * Bump CACHE_VERSION ao mudar estas regras para descartar caches antigos.
  */
-const CACHE_VERSION = 'hermeneus-v1';
+const CACHE_VERSION = 'hermeneus-v2';
 const PRECACHE = `${CACHE_VERSION}-precache`;
 const RUNTIME = `${CACHE_VERSION}-runtime`;
 
@@ -56,15 +56,31 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return; // dados/IA: sempre rede, sem cache
 
   // Navegações (HTML): network-first com fallback ao cache e à página offline.
+  // Capítulos (/compare/*) ganham um TIMEOUT: se a rede não responder em 2,5s
+  // (conexão lenta), serve a última versão cacheada na hora — a resposta da rede
+  // continua atualizando o cache em segundo plano. Não usamos SWR puro porque a
+  // página embute dados do usuário (anotações): com rede boa, fresco sempre.
   if (request.mode === 'navigate') {
+    const isChapter = url.pathname.startsWith('/compare/');
     event.respondWith(
-      fetch(request)
-        .then((response) => {
+      (async () => {
+        const network = fetch(request).then((response) => {
           const copy = response.clone();
           caches.open(RUNTIME).then((cache) => cache.put(request, copy)).catch(() => {});
           return response;
-        })
-        .catch(async () => (await caches.match(request)) || (await caches.match('/offline.html'))),
+        });
+
+        if (isChapter) {
+          const cached = await caches.match(request);
+          if (cached) {
+            // corrida: rede rápida vence (fresco); lenta cai no cache (instantâneo)
+            const timeout = new Promise((resolve) => setTimeout(() => resolve(cached), 2500));
+            return Promise.race([network.catch(() => cached), timeout]);
+          }
+        }
+
+        return network.catch(async () => (await caches.match(request)) || (await caches.match('/offline.html')));
+      })(),
     );
     return;
   }

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { AccountBadge } from '@/components/AccountBadge';
 import { ActivityCard, type Activity } from '@/components/ActivityCard';
 import { ResumeReading } from '@/components/ResumeReading';
@@ -46,8 +47,17 @@ const SECTIONS: { title: string; subtitle: string; items: Activity[] }[] = [
   },
 ];
 
+// Slot do plano de hoje: o fetch por-usuário (auth + reading_progress) vive AQUI,
+// dentro de um Suspense — a casca da home (corpus cacheado) chega primeiro e o
+// cartão do plano faz streaming depois, sem segurar a primeira pintura.
+async function TodayPlanSlot({ bookNames }: { bookNames: Record<string, string> }) {
+  const today = await getTodayReading();
+  if (!today) return null;
+  return <TodayPlanCard today={today} bookNames={bookNames} />;
+}
+
 export default async function HomePage() {
-  const [books, today] = await Promise.all([getBooks(), getTodayReading()]);
+  const books = await getBooks();
   const bookNames: Record<string, string> = Object.fromEntries(books.map((b) => [b.osis_code, b.name_pt]));
 
   return (
@@ -57,12 +67,23 @@ export default async function HomePage() {
           <h1 className="text-2xl font-semibold tracking-tight">Hermeneus</h1>
           <p className="text-sm text-neutral-500">Leia, compare e estude o texto bíblico no original.</p>
         </div>
-        <AccountBadge />
+        {/* Auth por cookie (getUser) não deve segurar a primeira pintura da home. */}
+        <Suspense
+          fallback={
+            <span role="status" className="h-9 w-24">
+              <span className="sr-only">Carregando conta…</span>
+            </span>
+          }
+        >
+          <AccountBadge />
+        </Suspense>
       </header>
 
       <ResumeReading bookNames={bookNames} />
 
-      {today && <TodayPlanCard today={today} bookNames={bookNames} />}
+      <Suspense fallback={null}>
+        <TodayPlanSlot bookNames={bookNames} />
+      </Suspense>
 
       <div className="flex flex-col gap-8">
         {SECTIONS.map((section) => (

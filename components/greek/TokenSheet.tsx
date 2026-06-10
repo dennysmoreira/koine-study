@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { LexiconEntry, Token } from '@/lib/corpus';
+import type { LexiconEntry } from '@/lib/corpus';
+import type { ChapterLemma, LeanToken } from '@/lib/chapter-view';
 import { glossLabel, parsingLabel, posLabel } from '@/lib/morph-labels';
 import { phoneticPtBR, transliterate } from '@/lib/transliterate';
 import { fetchLexicon } from '@/app/compare/actions';
 
-// Rótulos legíveis por fonte de léxico (coluna `lexicon_entries.source`).
+// Rótulos legíveis por fonte de léxico (coluna `lexicon_entries.source` +
+// 'abbott_smith', injetado pela action a partir de `lemmas.abbott_smith`).
 const LEXICON_LABELS: Record<string, string> = {
+  abbott_smith: 'Abbott-Smith',
   lsj: 'LSJ (Liddell-Scott-Jones)',
   thayers: "Thayer's",
   moulton_milligan: 'Moulton-Milligan',
@@ -52,11 +55,21 @@ function speak(surface: string, romanized: string) {
 }
 
 // Painel inferior com os dados linguísticos de um token grego: superfície,
-// Strong's, pronúncia (transliteração + áudio), lema, glosa, análise morfológica,
-// Abbott-Smith e os léxicos (LSJ etc.) buscados sob demanda.
-export function TokenSheet({ token, onClose }: { token: Token; onClose: () => void }) {
-  const gloss = glossLabel(token);
-  const strongs = token.lemma?.strongs ?? null;
+// Strong's, pronúncia (transliteração + áudio), lema, glosa, análise morfológica
+// e os léxicos (Abbott-Smith, LSJ etc.) buscados SOB DEMANDA ao abrir. O token é
+// o LeanToken da fronteira cliente; o `lemma` vem resolvido pelo Comparator a
+// partir do índice de léxico do capítulo (deduplicação do payload).
+export function TokenSheet({
+  token,
+  lemma,
+  onClose,
+}: {
+  token: LeanToken;
+  lemma: ChapterLemma | null;
+  onClose: () => void;
+}) {
+  const gloss = glossLabel(token, lemma);
+  const strongs = lemma?.strongs ?? null;
   const romanized = transliterate(token.surface);
   const [lexicon, setLexicon] = useState<LexiconEntry[] | null>(null);
   const [lexLoading, setLexLoading] = useState(false);
@@ -108,9 +121,7 @@ export function TokenSheet({ token, onClose }: { token: Token; onClose: () => vo
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-greek text-3xl">{token.surface}</span>
-          {token.lemma?.strongs && (
-            <span className="text-xs text-neutral-400">Strong {token.lemma.strongs}</span>
-          )}
+          {strongs && <span className="text-xs text-neutral-400">Strong {strongs}</span>}
         </div>
 
         <div className="mt-1 flex items-center gap-2">
@@ -135,13 +146,13 @@ export function TokenSheet({ token, onClose }: { token: Token; onClose: () => vo
           </button>
         </div>
 
-        {token.lemma && (
+        {lemma && (
           <p className="mt-2 text-sm text-neutral-500">
             Lema:{' '}
             <span className="font-greek text-base text-neutral-700 dark:text-neutral-200">
-              {token.lemma.lemma}
+              {lemma.lemma}
             </span>
-            <span className="ml-2 italic text-neutral-400">{transliterate(token.lemma.lemma)}</span>
+            <span className="ml-2 italic text-neutral-400">{transliterate(lemma.lemma)}</span>
           </p>
         )}
 
@@ -152,24 +163,13 @@ export function TokenSheet({ token, onClose }: { token: Token; onClose: () => vo
           <dd>{posLabel(token)}</dd>
           <dt className="text-neutral-400">Análise</dt>
           <dd>{parsingLabel(token)}</dd>
-          {token.lemma?.gloss_en && token.lemma.gloss_en !== gloss && (
+          {lemma?.gloss_en && lemma.gloss_en !== gloss && (
             <>
               <dt className="text-neutral-400">Glosa (EN)</dt>
-              <dd className="text-neutral-500">{token.lemma.gloss_en}</dd>
+              <dd className="text-neutral-500">{lemma.gloss_en}</dd>
             </>
           )}
         </dl>
-
-        {token.lemma?.abbott_smith && (
-          <section className="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
-              Abbott-Smith
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-              {token.lemma.abbott_smith}
-            </p>
-          </section>
-        )}
 
         {lexLoading && (
           <p className="mt-5 border-t border-neutral-200 pt-4 text-sm text-neutral-400 dark:border-neutral-800">

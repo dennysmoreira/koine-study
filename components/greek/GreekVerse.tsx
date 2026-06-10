@@ -1,6 +1,6 @@
 'use client';
 
-import type { Token } from '@/lib/corpus';
+import type { LeanToken } from '@/lib/chapter-view';
 
 // Renderiza o versículo grego como TEXTO CORRIDO (estilo prosa), não interlinear
 // empilhado: as palavras fluem como uma frase normal e cada uma é clicável,
@@ -13,8 +13,8 @@ export function GreekVerse({
   onSelect,
   activePosition,
 }: {
-  tokens: Token[];
-  onSelect: (t: Token) => void;
+  tokens: LeanToken[];
+  onSelect: (t: LeanToken) => void;
   activePosition: number | null;
 }) {
   return (
