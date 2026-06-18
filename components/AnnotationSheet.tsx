@@ -7,11 +7,12 @@
  * comparador é force-dynamic e re-busca as anotações). Link para a página
  * dedicada /annotations.
  */
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { annotationLabel, type Annotation, type CrossRef } from '@/lib/annotations';
 import { updateAnnotation, deleteAnnotation } from '@/app/annotations/actions';
+import { BottomSheet } from './BottomSheet';
 import { CrossRefPicker } from './CrossRefPicker';
 import { CrossRefChips } from './CrossRefChips';
 
@@ -31,14 +32,6 @@ export function AnnotationSheet({
   const [editRefs, setEditRefs] = useState<CrossRef[]>([]);
   const [pickingRef, setPickingRef] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   function startEdit(a: Annotation) {
     setError(null);
@@ -82,10 +75,7 @@ export function AnnotationSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="relative max-h-[75dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+    <BottomSheet onClose={onClose} ariaLabel={`Anotações do versículo ${verse}`} maxHeightClass="max-h-[75dvh]">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
           <span aria-hidden>📝</span> Anotações · versículo {verse}
         </h2>
@@ -194,7 +184,6 @@ export function AnnotationSheet({
         >
           Ver todas as anotações →
         </Link>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }

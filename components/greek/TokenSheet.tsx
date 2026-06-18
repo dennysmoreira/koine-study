@@ -7,6 +7,7 @@ import { glossLabel, parsingLabel, posLabel } from '@/lib/morph-labels';
 import { transliterate } from '@/lib/transliterate';
 import { fetchLexicon } from '@/app/compare/actions';
 import { SpeakButton } from '@/components/SpeakButton';
+import { BottomSheet } from '@/components/BottomSheet';
 import { loadShowMorph, saveShowMorph } from '@/lib/reader-prefs';
 
 // Rótulos legíveis por fonte de léxico (coluna `lexicon_entries.source` +
@@ -54,15 +55,6 @@ export function TokenSheet({
     });
   };
 
-  // Fecha ao pressionar Escape — saída por teclado esperada de um diálogo.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   // Busca as entradas de léxico (LSJ etc.) sob demanda ao abrir o painel. Não
   // viajam no payload do capítulo (entradas grandes). `ignore` evita aplicar o
   // resultado de um token anterior caso o usuário troque de token rapidamente.
@@ -90,15 +82,7 @@ export function TokenSheet({
   }, [strongs]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-      <button
-        type="button"
-        aria-label="Fechar"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+    <BottomSheet onClose={onClose} ariaLabel="Análise da palavra grega">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-greek text-3xl">{token.surface}</span>
           {strongs && <span className="text-xs text-neutral-600 dark:text-neutral-400">Strong {strongs}</span>}
@@ -189,7 +173,6 @@ export function TokenSheet({
             </>
           )}
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }

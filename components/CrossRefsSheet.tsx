@@ -10,6 +10,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { getVerseCrossReferences, fetchVersePreview } from '@/app/compare/actions';
+import { BottomSheet } from '@/components/BottomSheet';
 import type { CrossRef } from '@/lib/cross-references';
 import type { VersePreview } from '@/lib/translations';
 
@@ -43,14 +44,6 @@ export function CrossRefsSheet({
     });
   }, [osis, chapter, verse]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   function toggle(i: number, r: CrossRef) {
     if (openIdx === i) {
       setOpenIdx(null);
@@ -66,10 +59,7 @@ export function CrossRefsSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="relative max-h-[75dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+    <BottomSheet onClose={onClose} ariaLabel={`Referências cruzadas de ${bookName} ${chapter}:${verse}`} maxHeightClass="max-h-[75dvh]">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
           <span aria-hidden>⇄</span> Referências cruzadas · {bookName} {chapter}:{verse}
         </h2>
@@ -147,7 +137,6 @@ export function CrossRefsSheet({
         <p className="mt-4 text-[11px] text-neutral-400">
           Treasury of Scripture Knowledge · openbible.info (CC-BY), por relevância.
         </p>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }
