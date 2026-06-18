@@ -47,7 +47,7 @@ export function HebrewWordSheet({
           <span dir="rtl" className="font-hebrew text-4xl leading-tight">
             {word.surface}
           </span>
-          <span className="text-xs text-neutral-400">
+          <span className="text-xs text-neutral-600 dark:text-neutral-400">
             {word.morphemes.length === 1
               ? '1 morfema'
               : `${word.morphemes.length} morfemas`}
@@ -68,7 +68,7 @@ export function HebrewWordSheet({
                   <span dir="rtl" className="font-hebrew text-2xl">
                     {m.surface || '—'}
                   </span>
-                  {m.strongs && <span className="text-xs text-neutral-400">Strong {m.strongs}</span>}
+                  {m.strongs && <span className="text-xs text-neutral-600 dark:text-neutral-400">Strong {m.strongs}</span>}
                 </div>
 
                 {(lex?.xlit || lex?.pron) && (
@@ -76,7 +76,7 @@ export function HebrewWordSheet({
                     {lex.xlit && (
                       <span className="italic text-neutral-700 dark:text-neutral-200">{lex.xlit}</span>
                     )}
-                    {lex.pron && <span className="ml-2 text-neutral-400">/{lex.pron}/</span>}
+                    {lex.pron && <span className="ml-2 text-neutral-600 dark:text-neutral-400">/{lex.pron}/</span>}
                   </p>
                 )}
 
@@ -93,13 +93,13 @@ export function HebrewWordSheet({
 
                 {lex?.bdbDef && (
                   <p className="mt-1 text-sm leading-snug text-neutral-600 dark:text-neutral-300">
-                    <span className="text-neutral-400">BDB:</span> {lex.bdbDef}
+                    <span className="text-neutral-600 dark:text-neutral-400">BDB:</span> {lex.bdbDef}
                   </p>
                 )}
 
                 {parsing && (
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                    <dt className="text-neutral-400">Análise</dt>
+                    <dt className="text-neutral-600 dark:text-neutral-400">Análise</dt>
                     <dd>{parsing}</dd>
                   </dl>
                 )}

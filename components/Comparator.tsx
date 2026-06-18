@@ -902,12 +902,12 @@ export function Comparator({
               <Link
                 href={compareHref(book.osis_code, prev, codes)}
                 aria-label={`Capítulo anterior (${prev})`}
-                className="flex size-9 items-center justify-center rounded-md text-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                className="flex size-11 shrink-0 items-center justify-center rounded-md text-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
               >
                 ‹
               </Link>
             ) : (
-              <span aria-hidden className="flex size-9 items-center justify-center text-lg text-neutral-300 dark:text-neutral-700">
+              <span aria-hidden className="flex size-11 shrink-0 items-center justify-center text-lg text-neutral-300 dark:text-neutral-700">
                 ‹
               </span>
             )}
@@ -928,12 +928,12 @@ export function Comparator({
               <Link
                 href={compareHref(book.osis_code, next, codes)}
                 aria-label={`Próximo capítulo (${next})`}
-                className="flex size-9 items-center justify-center rounded-md text-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                className="flex size-11 shrink-0 items-center justify-center rounded-md text-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
               >
                 ›
               </Link>
             ) : (
-              <span aria-hidden className="flex size-9 items-center justify-center text-lg text-neutral-300 dark:text-neutral-700">
+              <span aria-hidden className="flex size-11 shrink-0 items-center justify-center text-lg text-neutral-300 dark:text-neutral-700">
                 ›
               </span>
             )}
