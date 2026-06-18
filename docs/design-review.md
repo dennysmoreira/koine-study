@@ -161,7 +161,7 @@ Ordem de consenso: **fundação de experiência antes de SaaS**. Status atualiza
 | 4 | Contraste AA: `text-neutral-400` → `neutral-600` em conteúdo | VIS-2 | P1 | ✅ Feito — `text-neutral-600 dark:text-neutral-400` em `TokenSheet`/`HebrewWordSheet` (rótulos, pronúncia, translit, léxico). Verificado: dark sem regressão (neutral-400); claro passa a neutral-600 (~7:1). Checkbox de versículo a 24px já atende AA 2.5.8 — mantido p/ não inflar a lista |
 | 5 | Alvos de toque ≥44px (setas/checkbox) | VIS-3 | P1 | ✅ Feito — setas de capítulo `size-9`→`size-11`+`shrink-0` em `Comparator`. Verificado no preview: 44×44px |
 | 6 | Token único de cor em CTA âmbar | UX-7/VIS | P2 | ✅ Feito — 6 CTAs `text-white`→`text-amber-950` + `hover:bg-amber-400` (canônico da VerseSelectionBar); corrige contraste (branco/amber ~2:1 falhava AA) e consistência. Verificado: botão Gerar = rgb(69,26,3). Balão de chat (share) mantido — padrão de mensagem, não CTA |
-| 7 | Progressive disclosure no `TokenSheet`/`HebrewWordSheet` | UX-4 | P1 | ⬜ Pendente |
+| 7 | Progressive disclosure no `TokenSheet`/`HebrewWordSheet` | UX-4 | P1 | ✅ Feito — significado (glosa/pronúncia/lema) sempre visível; morfologia + léxicos (grego) e BDB + análise por morfema (hebraico) sob "Análise avançada" colapsável, com preferência persistida (`loadShowMorph`/`saveShowMorph` em `reader-prefs`). Verificado no preview (ambos): colapsado por padrão → expande → persiste |
 | 8 | Primitivo `<BottomSheet>` compartilhado + focus trap | VIS-5 | P1 | ⬜ Pendente |
 | 9 | Camada de design tokens (cores/tipografia/raio) | VIS-4/DS | P1 | ⬜ Pendente |
 | — | Hardening multi-tenant, SRS, billing | Produto | — | 📋 Backlog (pré-SaaS) |

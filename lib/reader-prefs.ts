@@ -41,3 +41,26 @@ export function saveFontSize(size: ReaderFontSize): void {
     /* modo privado — apenas não persiste */
   }
 }
+
+export const SHOW_MORPH_KEY = 'koine:reader:show-morph';
+
+/**
+ * Mostrar a "Análise avançada" (morfologia + léxicos) já expandida nos painéis de
+ * palavra? Default `false`: o iniciante vê primeiro o significado (glosa,
+ * pronúncia); quem domina o original expande uma vez e a preferência fica.
+ */
+export function loadShowMorph(): boolean {
+  try {
+    return window.localStorage.getItem(SHOW_MORPH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function saveShowMorph(show: boolean): void {
+  try {
+    window.localStorage.setItem(SHOW_MORPH_KEY, show ? '1' : '0');
+  } catch {
+    /* modo privado — apenas não persiste */
+  }
+}

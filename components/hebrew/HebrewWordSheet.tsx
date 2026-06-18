@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { HebrewLexemeInfo, LeanHebrewWord } from '@/lib/chapter-view';
 import { decodeHebrewMorpheme, hebrewParsingLabel } from '@/lib/hebrew-morph';
+import { loadShowMorph, saveShowMorph } from '@/lib/reader-prefs';
 
 // Painel inferior com os dados linguísticos de uma palavra hebraica. Diferente do
 // grego (1 token = 1 lema/morfologia), a palavra hebraica é MULTI-MORFEMA, então
@@ -23,6 +24,20 @@ export function HebrewWordSheet({
   lexicon: Record<string, HebrewLexemeInfo>;
   onClose: () => void;
 }) {
+  // Progressive disclosure: BDB + análise morfológica ficam sob "Análise avançada"
+  // (significado primeiro). Preferência compartilhada com o painel grego e persiste.
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  useEffect(() => {
+    setShowAdvanced(loadShowMorph());
+  }, []);
+  const toggleAdvanced = () => {
+    setShowAdvanced((prev) => {
+      const next = !prev;
+      saveShowMorph(next);
+      return next;
+    });
+  };
+
   // Fecha ao pressionar Escape — saída por teclado esperada de um diálogo.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -91,13 +106,13 @@ export function HebrewWordSheet({
 
                 {lex?.gloss && <p className="mt-1 text-base font-medium">{lex.gloss}</p>}
 
-                {lex?.bdbDef && (
+                {showAdvanced && lex?.bdbDef && (
                   <p className="mt-1 text-sm leading-snug text-neutral-600 dark:text-neutral-300">
                     <span className="text-neutral-600 dark:text-neutral-400">BDB:</span> {lex.bdbDef}
                   </p>
                 )}
 
-                {parsing && (
+                {showAdvanced && parsing && (
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
                     <dt className="text-neutral-600 dark:text-neutral-400">Análise</dt>
                     <dd>{parsing}</dd>
@@ -107,6 +122,24 @@ export function HebrewWordSheet({
             );
           })}
         </ul>
+
+        {/* Toggle global da análise avançada (BDB + morfologia de cada morfema). */}
+        <div className="mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+          <button
+            type="button"
+            onClick={toggleAdvanced}
+            aria-expanded={showAdvanced}
+            className="flex w-full items-center justify-between gap-2 text-sm font-medium text-neutral-700 transition hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100"
+          >
+            <span>Análise avançada</span>
+            <span
+              aria-hidden
+              className={`text-neutral-500 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
+            >
+              ›
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );
