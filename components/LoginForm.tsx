@@ -29,11 +29,22 @@ function SubmitButton({ label }: { label: string }) {
 
 // Subformulário por modo: cada modo tem o PRÓPRIO useFormState, então erros e
 // mensagens de um modo não vazam para o outro ao alternar.
-function AuthForm({ mode, onModeChange }: { mode: Mode; onModeChange: (m: Mode) => void }) {
+function AuthForm({
+  mode,
+  onModeChange,
+  next,
+}: {
+  mode: Mode;
+  onModeChange: (m: Mode) => void;
+  next?: string | null;
+}) {
   const [state, formAction] = useFormState(ACTIONS[mode], initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      {/* Redireciona de volta ao ponto de origem apos entrar/criar conta (signin
+          e signup). O modo 'reset' nao redireciona — segue o fluxo de e-mail. */}
+      {next && mode !== 'reset' && <input type="hidden" name="next" value={next} />}
       {mode === 'reset' && (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           Informe o e-mail da sua conta e enviaremos um link para definir uma nova senha.
@@ -93,7 +104,7 @@ function AuthForm({ mode, onModeChange }: { mode: Mode; onModeChange: (m: Mode) 
   );
 }
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string | null }) {
   const [mode, setMode] = useState<Mode>('signin');
 
   return (
@@ -121,7 +132,7 @@ export function LoginForm() {
 
       {/* key={mode} remonta o subformulário ao trocar de modo: estado de erro/
           mensagem e campos digitados não vazam de um modo para o outro. */}
-      <AuthForm key={mode} mode={mode} onModeChange={setMode} />
+      <AuthForm key={mode} mode={mode} onModeChange={setMode} next={next} />
     </div>
   );
 }

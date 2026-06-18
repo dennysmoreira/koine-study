@@ -6,6 +6,7 @@ import { getChapterView } from '@/lib/chapter-view';
 import { getAnnotationsForChapter } from '@/lib/annotations-server';
 import { getHighlightsForChapter } from '@/lib/highlights';
 import { Comparator } from '@/components/Comparator';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,12 +37,14 @@ export default async function ComparePage({
     ? searchParams.v.split(',').map((c) => c.trim()).filter(Boolean)
     : defaultCodes(allTranslations);
 
-  const [chapter, books, annotations, highlights] = await Promise.all([
+  const [chapter, books, annotations, highlights, { data: userData }] = await Promise.all([
     getChapterView(osis, chapterNumber, requested),
     getBooks(),
     getAnnotationsForChapter(osis, chapterNumber),
     getHighlightsForChapter(osis, chapterNumber),
+    createClient().auth.getUser(),
   ]);
+  const isAuthenticated = Boolean(userData?.user);
 
   if (!chapter || chapter.rows.length === 0) {
     return (
@@ -63,6 +66,7 @@ export default async function ComparePage({
       allTranslations={allTranslations}
       annotations={annotations}
       highlights={highlights}
+      isAuthenticated={isAuthenticated}
     />
   );
 }

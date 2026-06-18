@@ -13,7 +13,7 @@
  * Não toca no Gemini: delega às server actions e navega para o workspace.
  */
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   createStudy,
   addReferencesToStudy,
@@ -25,6 +25,7 @@ import { createAnnotation } from '@/app/annotations/actions';
 import { applyHighlight, removeHighlight } from '@/app/highlights/actions';
 import { HIGHLIGHT_COLORS, HIGHLIGHT_DOT, HIGHLIGHT_LABEL } from '@/lib/highlight-colors';
 import type { CrossRef } from '@/lib/annotations';
+import { saveSelectionDraft, type SelectionAction } from '@/lib/selection-draft';
 import { CrossRefPicker } from './CrossRefPicker';
 import { CrossRefChips } from './CrossRefChips';
 
@@ -33,23 +34,52 @@ export function VerseSelectionBar({
   bookName,
   chapter,
   onClear,
+  isAuthenticated,
+  initialNote,
+  initialRefs,
+  autoCompose,
 }: {
   references: ReferenceInput[];
   bookName: string;
   chapter: number;
   onClear: () => void;
+  /** Sessão ativa? Se não, as ações que exigem conta levam ao login (gate). */
+  isAuthenticated: boolean;
+  /** Rascunho re-hidratado pós-login (texto da anotação). */
+  initialNote?: string;
+  initialRefs?: CrossRef[];
+  /** Reabre o compositor de anotação automaticamente (re-hidratação). */
+  autoCompose?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [picker, setPicker] = useState(false);
   const [studies, setStudies] = useState<StudyOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [composing, setComposing] = useState(false);
-  const [note, setNote] = useState('');
+  const [composing, setComposing] = useState(Boolean(autoCompose));
+  const [note, setNote] = useState(initialNote ?? '');
   // Seletor de cor do marca-texto (aberto pelo botão 🖍️ Destacar).
   const [highlighting, setHighlighting] = useState(false);
-  const [refs, setRefs] = useState<CrossRef[]>([]);
+  const [refs, setRefs] = useState<CrossRef[]>(initialRefs ?? []);
   const [pickingRef, setPickingRef] = useState(false);
+
+  // Manda ao login preservando o que o usuário já investiu (versículos + texto).
+  // Volta para ESTE capítulo (next) e a re-hidratação reabre o rascunho.
+  function gateToLogin(action: SelectionAction, extras?: { note?: string; refs?: CrossRef[] }) {
+    saveSelectionDraft({
+      path: pathname,
+      verses: references.map((r) => r.verse),
+      action,
+      note: extras?.note,
+      refs: extras?.refs,
+      ts: Date.now(),
+    });
+    const query = searchParams.toString();
+    const here = query ? `${pathname}?${query}` : pathname;
+    router.push(`/login?next=${encodeURIComponent(here)}`);
+  }
 
   const count = references.length;
   const defaultTitle = `${bookName} ${chapter}`;
@@ -72,6 +102,11 @@ export function VerseSelectionBar({
     const first = references[0];
     if (!first) return;
     setError(null);
+    // Gate anônimo: preserva o texto digitado e leva ao login (volta e re-hidrata).
+    if (!isAuthenticated) {
+      gateToLogin('annotate', { note: body, refs });
+      return;
+    }
     startTransition(async () => {
       const res = await createAnnotation({
         osis: first.osis,
@@ -97,6 +132,10 @@ export function VerseSelectionBar({
 
   function openPicker() {
     setError(null);
+    if (!isAuthenticated) {
+      gateToLogin('study');
+      return;
+    }
     setPicker(true);
     setStudies(null);
     startTransition(async () => {
@@ -135,6 +174,10 @@ export function VerseSelectionBar({
 
   function createWith(ask: boolean) {
     setError(null);
+    if (!isAuthenticated) {
+      gateToLogin('ai');
+      return;
+    }
     startTransition(async () => {
       const res = await createStudy({
         title: ask ? `Explicação — ${defaultTitle}` : defaultTitle,
@@ -181,6 +224,10 @@ export function VerseSelectionBar({
               type="button"
               onClick={() => {
                 setError(null);
+                if (!isAuthenticated) {
+                  gateToLogin('highlight');
+                  return;
+                }
                 setComposing(false);
                 setHighlighting((h) => !h);
               }}
@@ -207,6 +254,16 @@ export function VerseSelectionBar({
               <span aria-hidden>✨</span> Explicar com IA
             </button>
           </div>
+
+          {/* Aviso proativo: deixa claro ANTES do clique que salvar exige conta —
+              o usuário não descobre só ao falhar. O trabalho não se perde: ao
+              entrar, ele volta a este capítulo com a seleção (e a anotação). */}
+          {!isAuthenticated && (
+            <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+              <span aria-hidden>🔒</span> Entre para salvar — sua seleção e o que você
+              escrever não serão perdidos.
+            </p>
+          )}
 
           {/* Seletor de cor: aplica nos versículos selecionados; "sem cor" remove. */}
           {highlighting && (
@@ -289,7 +346,7 @@ export function VerseSelectionBar({
                 disabled={pending}
                 className="min-h-[44px] rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
               >
-                {pending ? 'Salvando…' : 'Salvar anotação'}
+                {pending ? 'Salvando…' : isAuthenticated ? 'Salvar anotação' : 'Entrar para salvar'}
               </button>
             </div>
           </div>

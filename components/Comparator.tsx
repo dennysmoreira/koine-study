@@ -17,9 +17,10 @@ import { AnnotationSheet } from './AnnotationSheet';
 import { CrossRefsSheet } from './CrossRefsSheet';
 import { ReaderHelp } from './ReaderHelp';
 import type { ReferenceInput } from '@/app/study/actions';
-import type { Annotation } from '@/lib/annotations';
+import type { Annotation, CrossRef } from '@/lib/annotations';
 import type { HighlightColor } from '@/lib/highlight-colors';
 import { getBookChapters, getChapterVerses } from '@/app/compare/actions';
+import { loadSelectionDraft, clearSelectionDraft } from '@/lib/selection-draft';
 import {
   DEFAULT_FONT_SIZE,
   FONT_SIZES,
@@ -399,6 +400,7 @@ export function Comparator({
   allTranslations,
   annotations,
   highlights,
+  isAuthenticated,
 }: {
   chapter: ChapterView;
   books: Book[];
@@ -406,6 +408,8 @@ export function Comparator({
   annotations: Annotation[];
   /** verso → cor do marca-texto do usuário (vazio se anônimo). */
   highlights: Record<number, HighlightColor>;
+  /** Sessão ativa? Gateia ações que exigem conta na barra de seleção. */
+  isAuthenticated: boolean;
 }) {
   const { book, number, chapters, translations, rows, greekLexicon, hebrewLexicon } = chapter;
   const [navOpen, setNavOpen] = useState(false);
@@ -415,6 +419,13 @@ export function Comparator({
   // ganha uma caixa de seleção; a barra de ação aparece com 1+ selecionados.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedVerses, setSelectedVerses] = useState<Set<number>>(new Set());
+  // Rascunho re-hidratado do gate anônimo (ver lib/selection-draft): ao voltar
+  // autenticado, o compositor de anotação reabre com o texto/refs que o usuário
+  // tinha digitado antes de ser mandado ao login. `undefined` = sem re-hidratação.
+  const [draftNote, setDraftNote] = useState<string | undefined>(undefined);
+  const [draftRefs, setDraftRefs] = useState<CrossRef[] | undefined>(undefined);
+  const [draftAutoCompose, setDraftAutoCompose] = useState(false);
+  const rehydratedRef = useRef(false);
   // Token grego selecionado (abre o TokenSheet com os dados linguísticos).
   const [selected, setSelected] = useState<{ verse: number; token: LeanToken } | null>(null);
   // Palavra hebraica selecionada (abre o HebrewWordSheet, breakdown por morfema).
@@ -820,6 +831,35 @@ export function Comparator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Re-hidratação do rascunho do gate anônimo: ao montar JÁ autenticado e havendo
+  // um rascunho para ESTE capítulo (casamento por pathname), restaura a seleção e,
+  // se a ação era "anotar", reabre o compositor com o texto/refs. Roda uma vez
+  // (rehydratedRef) e limpa o rascunho para não reabrir em navegações futuras.
+  useEffect(() => {
+    if (rehydratedRef.current || !isAuthenticated) return;
+    const draft = loadSelectionDraft();
+    if (!draft) return;
+    if (draft.path.split('?')[0] !== `/compare/${book.osis_code}/${number}`) return;
+
+    const valid = new Set(draft.verses.filter((v) => rows.some((r) => r.verse === v)));
+    rehydratedRef.current = true;
+    clearSelectionDraft();
+    if (valid.size === 0) return;
+
+    setSelectMode(true);
+    setSelectedVerses(valid);
+    if (draft.action === 'annotate') {
+      setDraftNote(draft.note ?? '');
+      setDraftRefs(draft.refs ?? []);
+      setDraftAutoCompose(true);
+    }
+    const first = Math.min(...valid);
+    window.setTimeout(
+      () => document.getElementById(`v${first}`)?.scrollIntoView({ block: 'center' }),
+      120,
+    );
+  }, [isAuthenticated, book.osis_code, number, rows]);
+
   const toggleVerse = (verse: number) => {
     setSelectedVerses((prev) => {
       const next = new Set(prev);
@@ -832,6 +872,9 @@ export function Comparator({
   const exitSelectMode = () => {
     setSelectMode(false);
     setSelectedVerses(new Set());
+    setDraftNote(undefined);
+    setDraftRefs(undefined);
+    setDraftAutoCompose(false);
   };
 
   // Referências selecionadas, prontas para as server actions (ordenadas por versículo).
@@ -1236,6 +1279,10 @@ export function Comparator({
           bookName={book.name_pt}
           chapter={number}
           onClear={exitSelectMode}
+          isAuthenticated={isAuthenticated}
+          initialNote={draftNote}
+          initialRefs={draftRefs}
+          autoCompose={draftAutoCompose}
         />
       )}
     </div>

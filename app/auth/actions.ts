@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { safeNextPath } from '@/lib/safe-next';
 
 export interface AuthState {
   error?: string;
@@ -24,8 +25,11 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: 'E-mail ou senha inválidos.' };
 
+  // `next` traz o usuario de volta de onde veio (ex.: o capitulo onde tentou
+  // anotar sem conta). safeNextPath barra open redirect.
+  const next = safeNextPath(formData.get('next') as string | null);
   revalidatePath('/', 'layout');
-  redirect('/');
+  redirect(next ?? '/');
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -44,8 +48,9 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
 
   // Sessão imediata (confirmação de e-mail desativada no projeto) → entra direto.
   if (data.session) {
+    const next = safeNextPath(formData.get('next') as string | null);
     revalidatePath('/', 'layout');
-    redirect('/');
+    redirect(next ?? '/');
   }
   return { message: 'Conta criada. Confirme o e-mail enviado para concluir o acesso.' };
 }
