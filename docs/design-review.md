@@ -157,10 +157,10 @@ Ordem de consenso: **fundação de experiência antes de SaaS**. Status atualiza
 |---|------|--------|-----|--------|
 | 1 | Carregar fontes grega/hebraica e ligar `--font-greek`/`--font-hebrew` | VIS-1 | P0 | ✅ Feito — `next/font/google` (Gentium Plus + Frank Ruhl Libre) em `layout.tsx`; verificado no preview (grego politônico + hebraico niqqud/cantilação). Follow-up: self-host SBL Hebrew p/ cantilação premium |
 | 2 | Gate visível + preservar rascunho ao acionar ação que exige conta | UX-1 | P0 | ✅ Feito — `isAuthenticated` threaded (page→Comparator→VerseSelectionBar); aviso proativo 🔒; ações gated salvam rascunho (`lib/selection-draft.ts`) e vão a `/login?next=` (anti-open-redirect em `lib/safe-next.ts`); re-hidratação reabre seleção+compositor ao voltar logado. Verificado: gate, draft, redirect e guard anônimo. Login autenticado→redirect: code-verified (sem credenciais para rodar) |
-| 3 | CTA de conversão na `/share/[token]` | UX-6 | P0→quick win | ⬜ Pendente |
-| 4 | Contraste AA: `text-neutral-400` → `neutral-600` em conteúdo | VIS-2 | P1 | ⬜ Pendente |
-| 5 | Alvos de toque ≥44px (setas/checkbox) | VIS-3 | P1 | ⬜ Pendente |
-| 6 | Token único de cor em CTA âmbar | UX-7/VIS | P2 | ⬜ Pendente |
+| 3 | CTA de conversão na `/share/[token]` | UX-6 | P0→quick win | ✅ Feito — banner de conversão p/ visitante anônimo ("Criar conta grátis" + proposta de valor) e atalho discreto "Abrir o Hermeneus" p/ logado, em `app/share/[token]/page.tsx`. Typecheck/lint limpos; render ao vivo pende de token real de snapshot (não verificado) |
+| 4 | Contraste AA: `text-neutral-400` → `neutral-600` em conteúdo | VIS-2 | P1 | ✅ Feito — `text-neutral-600 dark:text-neutral-400` em `TokenSheet`/`HebrewWordSheet` (rótulos, pronúncia, translit, léxico). Verificado: dark sem regressão (neutral-400); claro passa a neutral-600 (~7:1). Checkbox de versículo a 24px já atende AA 2.5.8 — mantido p/ não inflar a lista |
+| 5 | Alvos de toque ≥44px (setas/checkbox) | VIS-3 | P1 | ✅ Feito — setas de capítulo `size-9`→`size-11`+`shrink-0` em `Comparator`. Verificado no preview: 44×44px |
+| 6 | Token único de cor em CTA âmbar | UX-7/VIS | P2 | ✅ Feito — 6 CTAs `text-white`→`text-amber-950` + `hover:bg-amber-400` (canônico da VerseSelectionBar); corrige contraste (branco/amber ~2:1 falhava AA) e consistência. Verificado: botão Gerar = rgb(69,26,3). Balão de chat (share) mantido — padrão de mensagem, não CTA |
 | 7 | Progressive disclosure no `TokenSheet`/`HebrewWordSheet` | UX-4 | P1 | ⬜ Pendente |
 | 8 | Primitivo `<BottomSheet>` compartilhado + focus trap | VIS-5 | P1 | ⬜ Pendente |
 | 9 | Camada de design tokens (cores/tipografia/raio) | VIS-4/DS | P1 | ⬜ Pendente |
