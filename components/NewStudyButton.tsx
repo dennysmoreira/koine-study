@@ -31,7 +31,7 @@ export function NewStudyButton({ className }: { className?: string }) {
         disabled={pending}
         className={
           className ??
-          'rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60'
+          'rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60'
         }
       >
         {pending ? 'Criando…' : '+ Novo estudo'}

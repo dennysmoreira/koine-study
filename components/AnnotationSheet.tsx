@@ -146,7 +146,7 @@ export function AnnotationSheet({
                       type="button"
                       onClick={() => saveEdit(a.id)}
                       disabled={pending}
-                      className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                      className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
                     >
                       {pending ? 'Salvando…' : 'Salvar'}
                     </button>

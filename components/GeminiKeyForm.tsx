@@ -79,7 +79,7 @@ export function GeminiKeyForm({ hasKey }: { hasKey: boolean }) {
               type="button"
               onClick={save}
               disabled={pending}
-              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-60"
             >
               {pending ? 'Salvando…' : 'Salvar chave'}
             </button>

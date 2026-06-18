@@ -179,7 +179,7 @@ export function StudyModal({
               <button
                 type="button"
                 onClick={generate}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400"
               >
                 ✨ Gerar
               </button>
