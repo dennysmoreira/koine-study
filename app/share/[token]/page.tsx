@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getPublicSnapshot, type StudySnapshot, type AnnotationSnapshot } from '@/lib/shared-studies';
+import { createClient } from '@/lib/supabase/server';
 
 // Conteúdo é por-token e vem de dados do usuário; sem cache estático.
 export const dynamic = 'force-dynamic';
@@ -133,11 +134,44 @@ function AnnotationView({ s }: { s: AnnotationSnapshot }) {
   );
 }
 
+// Banner de conversão: a página de share é a porta de entrada viral do produto
+// (link público read-only). Sem CTA, o visitante novo só tem o logo para clicar.
+// Para o visitante anônimo, vira funil; para quem já tem conta, um atalho discreto.
+function ConversionCTA({ isAuthenticated }: { isAuthenticated: boolean }) {
+  if (isAuthenticated) {
+    return (
+      <div className="mt-10 text-center">
+        <Link href="/" className="text-sm font-medium text-amber-700 hover:underline dark:text-amber-400">
+          Abrir o Hermeneus →
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <section className="mt-10 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-center dark:border-amber-800/60 dark:bg-amber-900/15">
+      <h2 className="text-lg font-semibold tracking-tight">Estude a Bíblia no original</h2>
+      <p className="mx-auto mt-1 max-w-md text-sm text-neutral-600 dark:text-neutral-300">
+        Leia grego e hebraico com a língua explicada ao toque — morfologia, léxico e estudo
+        com IA fundamentado no texto. No celular, de graça para começar.
+      </p>
+      <Link
+        href="/login"
+        className="mt-4 inline-flex min-h-[44px] items-center rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-400"
+      >
+        Criar conta grátis
+      </Link>
+    </section>
+  );
+}
+
 export default async function SharePage({ params }: { params: { token: string } }) {
   const result = await getPublicSnapshot(params.token);
   if (!result) notFound();
 
   const { snapshot, snapshotAt } = result;
+  const {
+    data: { user },
+  } = await createClient().auth.getUser();
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
@@ -154,6 +188,8 @@ export default async function SharePage({ params }: { params: { token: string } 
       </header>
 
       {snapshot.kind === 'study' ? <StudyView s={snapshot} /> : <AnnotationView s={snapshot} />}
+
+      <ConversionCTA isAuthenticated={Boolean(user)} />
 
       <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs text-neutral-500 dark:text-neutral-400 dark:border-neutral-800">
         Compartilhado de <span className="font-medium">Hermeneus</span> · snapshot de {dateFmt.format(new Date(snapshotAt))}
