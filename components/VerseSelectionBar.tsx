@@ -26,6 +26,7 @@ import { applyHighlight, removeHighlight } from '@/app/highlights/actions';
 import { HIGHLIGHT_COLORS, HIGHLIGHT_DOT, HIGHLIGHT_LABEL } from '@/lib/highlight-colors';
 import type { CrossRef } from '@/lib/annotations';
 import { saveSelectionDraft, type SelectionAction } from '@/lib/selection-draft';
+import { BottomSheet } from './BottomSheet';
 import { CrossRefPicker } from './CrossRefPicker';
 import { CrossRefChips } from './CrossRefChips';
 
@@ -355,10 +356,7 @@ export function VerseSelectionBar({
       </div>
 
       {picker && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-          <button type="button" aria-label="Fechar" onClick={() => setPicker(false)} className="absolute inset-0 bg-black/40" />
-          <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+        <BottomSheet onClose={() => setPicker(false)} ariaLabel="Adicionar versículos a um estudo">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">
               Adicionar {count} versículo{count > 1 ? 's' : ''} a…
             </h2>
@@ -392,8 +390,7 @@ export function VerseSelectionBar({
                 ))}
               </ul>
             )}
-          </div>
-        </div>
+        </BottomSheet>
       )}
     </>
   );

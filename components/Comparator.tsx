@@ -16,6 +16,7 @@ import { VerseSelectionBar } from './VerseSelectionBar';
 import { AnnotationSheet } from './AnnotationSheet';
 import { CrossRefsSheet } from './CrossRefsSheet';
 import { ReaderHelp } from './ReaderHelp';
+import { BottomSheet } from './BottomSheet';
 import type { ReferenceInput } from '@/app/study/actions';
 import type { Annotation, CrossRef } from '@/lib/annotations';
 import type { HighlightColor } from '@/lib/highlight-colors';
@@ -43,18 +44,6 @@ const HEADER_OFFSET_PX = 80;
 function parseGoto(raw: string | null): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
-}
-
-// Fecha um sheet/modal ao pressionar Escape. `aria-modal` promete que o fundo é
-// inerte; o Escape entrega a saída por teclado esperada de um diálogo.
-function useEscapeToClose(onClose: () => void) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 }
 
 // Monta a URL do comparador preservando as versões selecionadas. `goto` (quando
@@ -92,7 +81,6 @@ function NavSheet({
   onVerse: (verse: number) => void;
 }) {
   const router = useRouter();
-  useEscapeToClose(onClose);
 
   const [selectedOsis, setSelectedOsis] = useState(current.osis_code);
   const [chapterList, setChapterList] = useState<number[]>(chapters);
@@ -167,11 +155,7 @@ function NavSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="relative max-h-[80dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
-
+    <BottomSheet onClose={onClose} ariaLabel="Navegar: livro, capítulo e versículo" maxHeightClass="max-h-[80dvh]">
         <label htmlFor="cmp-book" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Livro
         </label>
@@ -246,8 +230,7 @@ function NavSheet({
             )}
           </>
         )}
-      </div>
-    </div>
+    </BottomSheet>
   );
 }
 
@@ -306,7 +289,6 @@ function VersionSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
-  useEscapeToClose(onClose);
   const selectedSet = new Set(selected);
 
   // As duas linhas is_original (grego e hebraico) são UMA opção lógica no
@@ -349,10 +331,7 @@ function VersionSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="relative max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl dark:bg-neutral-900">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+    <BottomSheet onClose={onClose} ariaLabel="Versões para comparar">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Versões</h2>
         <div className="mt-3 flex flex-col gap-2">
           {originals.length > 0 && (
@@ -379,8 +358,7 @@ function VersionSheet({
             aqui automaticamente quando forem licenciadas.
           </p>
         )}
-      </div>
-    </div>
+    </BottomSheet>
   );
 }
 
