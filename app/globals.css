@@ -4,6 +4,24 @@
 
 :root {
   color-scheme: light dark;
+
+  /* Tokens semânticos de cor (RGB separado por espaço p/ o Tailwind aplicar
+     opacidade via rgb(var(--x) / <alpha>)). Trocados no media query de tema
+     abaixo — assim `bg-surface`/`text-muted`/`border-line` se adaptam ao
+     claro/escuro num só lugar, sem repetir `dark:` em cada componente. */
+  --surface: 255 255 255; /* white */
+  --surface-muted: 245 245 245; /* neutral-100 */
+  --muted: 82 82 82; /* neutral-600 — texto secundário ACESSÍVEL (AA) */
+  --line: 229 229 229; /* neutral-200 */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: 23 23 23; /* neutral-900 */
+    --surface-muted: 38 38 38; /* neutral-800 */
+    --muted: 163 163 163; /* neutral-400 */
+    --line: 38 38 38; /* neutral-800 */
+  }
 }
 
 html {

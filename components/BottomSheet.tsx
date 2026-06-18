@@ -79,7 +79,7 @@ export function BottomSheet({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`relative ${maxHeightClass} overflow-y-auto rounded-t-2xl bg-white p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl outline-none dark:bg-neutral-900`}
+        className={`relative ${maxHeightClass} overflow-y-auto rounded-t-2xl bg-surface p-5 pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] shadow-xl outline-none`}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
         {children}

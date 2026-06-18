@@ -85,11 +85,11 @@ export function TokenSheet({
     <BottomSheet onClose={onClose} ariaLabel="Análise da palavra grega">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-greek text-3xl">{token.surface}</span>
-          {strongs && <span className="text-xs text-neutral-600 dark:text-neutral-400">Strong {strongs}</span>}
+          {strongs && <span className="text-xs text-muted">Strong {strongs}</span>}
         </div>
 
         <div className="mt-1 flex items-center gap-2">
-          <p className="text-base italic text-neutral-600 dark:text-neutral-400" aria-label="Pronúncia">
+          <p className="text-base italic text-muted" aria-label="Pronúncia">
             {romanized}
           </p>
           <SpeakButton text={token.surface} romanized={romanized} lang="grc" />
@@ -101,7 +101,7 @@ export function TokenSheet({
             <span className="font-greek text-base text-neutral-700 dark:text-neutral-200">
               {lemma.lemma}
             </span>
-            <span className="ml-2 italic text-neutral-600 dark:text-neutral-400">{transliterate(lemma.lemma)}</span>
+            <span className="ml-2 italic text-muted">{transliterate(lemma.lemma)}</span>
           </p>
         )}
 
@@ -128,34 +128,34 @@ export function TokenSheet({
           {showAdvanced && (
             <>
               <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                <dt className="text-neutral-600 dark:text-neutral-400">Classe</dt>
+                <dt className="text-muted">Classe</dt>
                 <dd>{posLabel(token)}</dd>
-                <dt className="text-neutral-600 dark:text-neutral-400">Análise</dt>
+                <dt className="text-muted">Análise</dt>
                 <dd>{parsingLabel(token)}</dd>
                 {lemma?.gloss_en && lemma.gloss_en !== gloss && (
                   <>
-                    <dt className="text-neutral-600 dark:text-neutral-400">Glosa (EN)</dt>
+                    <dt className="text-muted">Glosa (EN)</dt>
                     <dd className="text-neutral-500">{lemma.gloss_en}</dd>
                   </>
                 )}
               </dl>
 
               {lexLoading && (
-                <p className="mt-5 text-sm text-neutral-600 dark:text-neutral-400">
+                <p className="mt-5 text-sm text-muted">
                   Carregando léxico…
                 </p>
               )}
 
               {lexicon?.map((entry) => (
                 <section key={entry.source} className="mt-5">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-400">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
                     {LEXICON_LABELS[entry.source] ?? entry.source.toUpperCase()}
                   </h3>
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
                     {entry.text_pt ?? entry.text_en}
                   </p>
                   {entry.source === 'lsj' && (
-                    <p className="mt-2 text-[11px] text-neutral-600 dark:text-neutral-400">
+                    <p className="mt-2 text-[11px] text-muted">
                       LSJ via{' '}
                       <a
                         href="https://github.com/STEPBible/STEPBible-Data"
