@@ -1,7 +1,28 @@
 import type { Metadata, Viewport } from 'next';
+import { Gentium_Plus, Frank_Ruhl_Libre } from 'next/font/google';
 import './globals.css';
 import { AppShell } from '@/components/AppShell';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+
+// Grego do NT é politonico (espiritos, tres acentos, iota subscrito): o subset
+// 'greek-ext' (bloco Unicode Greek Extended) e obrigatorio. Gentium Plus posiciona
+// os diacriticos empilhados corretamente — fontes de sistema nao cobrem bem.
+const greek = Gentium_Plus({
+  subsets: ['latin', 'greek', 'greek-ext'],
+  weight: ['400', '700'],
+  variable: '--font-greek',
+  display: 'swap',
+});
+
+// Hebraico biblico e apontado (niqqud). Frank Ruhl Libre e serifada tradicional
+// com suporte a vocalizacao. Cantilacao (te'amim) completa pede SBL Hebrew/Taamey
+// Frank CLM self-hosted — follow-up registrado em docs/design-review.md.
+const hebrew = Frank_Ruhl_Libre({
+  subsets: ['latin', 'hebrew'],
+  weight: ['400', '500', '700'],
+  variable: '--font-hebrew',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Hermeneus',
@@ -36,7 +57,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={`${greek.variable} ${hebrew.variable}`}>
       {/* O AppShell reserva o espaço da BottomNav só onde ela aparece. */}
       <body className="min-h-dvh">
         <AppShell>{children}</AppShell>
