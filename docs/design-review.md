@@ -180,7 +180,9 @@ app rodando (375px) + remediação, branch `feat/leitor-fluidez`:
 | "Selecionar" como modo no header | Botão de modo pouco intuitivo | **Long-press (~500ms) no número do versículo** entra em seleção; remove o botão; auto-sai ao desmarcar tudo; dica tátil; gestos ensinados na ajuda | ✅ Feito (verificado) |
 | Versões ocupava o header | Botão permanente p/ ação ocasional | **Toque na legenda** (mobile) / cabeçalho (desktop) abre o seletor; ▾ sinaliza | ✅ Feito (verificado) |
 | 🔊/Aa/? poluíam o header | 3 ícones permanentes | Menu **"⋯"** (BottomSheet) com Áudio, Tamanho da fonte e Ajuda | ✅ Feito (verificado) |
-| "Lento/travado" | `force-dynamic` + `loading.tsx` = round-trip por capítulo; DOM pesado | **Pendente** — navegação otimista/prefetch de capítulos | ⬜ Próximo |
+| "Lento/travado" | `force-dynamic` + `loading.tsx` = round-trip por capítulo; DOM pesado | **Prefetch dos capítulos adjacentes** (`router.prefetch` de prev/next — leitura linear vem aquecida) + **skeleton com a forma do leitor** (header+legenda+versos) no lugar do esqueleto genérico que piscava a tela inteira | 🟡 Parcial (verificado: João 1→2 sem flash) |
+
+**Follow-up profundo (não neste PR):** navegação **instantânea** de qualquer capítulo exigiria tirar o `force-dynamic` — renderizar o corpus (cacheável) estático e carregar anotações/destaques no cliente após a pintura. Refactor maior; fica para etapa dedicada.
 
 Notas: `ReaderHelp` virou componente **controlado** (auto-abre 1×/dispositivo via `READER_HINT_KEY`,
 e pelo item "Ajuda" do `⋯`); instruções atualizadas para os gestos novos (✋ segurar, 🔖 legenda).

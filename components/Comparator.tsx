@@ -708,6 +708,16 @@ export function Comparator({
   const prev = idx > 0 ? chapters[idx - 1] : null;
   const next = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null;
 
+  // Prefetch dos capítulos adjacentes: aquece o router cache (boundary + segmentos
+  // de corpus já cacheados) para que prev/next — o gesto dominante na leitura
+  // linear — fiquem mais rápidos e com menos flash. codesKey nas deps porque
+  // `codes` é array novo a cada render.
+  useEffect(() => {
+    if (prev != null) router.prefetch(compareHref(book.osis_code, prev, codes));
+    if (next != null) router.prefetch(compareHref(book.osis_code, next, codes));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.osis_code, prev, next, codesKey]);
+
   // Swipe horizontal para trocar de capítulo (gesto natural de "virar página").
   // Critérios: deslocamento horizontal ≥ 70px, dominância horizontal (2× o
   // vertical), fora do modo seleção, sem sheet aberto e sem texto selecionado
