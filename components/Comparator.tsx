@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Book } from '@/lib/corpus';
@@ -15,7 +14,7 @@ import { StudyModal } from './StudyModal';
 import { VerseSelectionBar } from './VerseSelectionBar';
 import { AnnotationSheet } from './AnnotationSheet';
 import { CrossRefsSheet } from './CrossRefsSheet';
-import { ReaderHelp } from './ReaderHelp';
+import { ReaderHelp, READER_HINT_KEY } from './ReaderHelp';
 import { BottomSheet } from './BottomSheet';
 import type { ReferenceInput } from '@/app/study/actions';
 import type { Annotation, CrossRef } from '@/lib/annotations';
@@ -393,6 +392,9 @@ export function Comparator({
   const [navOpen, setNavOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [studyOpen, setStudyOpen] = useState(false);
+  // Menu "⋯" (ferramentas de leitura: áudio, fonte, ajuda) e a folha de ajuda.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   // Modo de seleção de versículos (para citar/explicar). Quando ativo, cada linha
   // ganha uma caixa de seleção; a barra de ação aparece com 1+ selecionados.
   const [selectMode, setSelectMode] = useState(false);
@@ -417,7 +419,6 @@ export function Comparator({
   // Tamanho da fonte de leitura (preferência Aa). Começa no default no SSR e
   // assume o valor salvo após a montagem — evita divergência de hidratação.
   const [fontSize, setFontSize] = useState<ReaderFontSize>(DEFAULT_FONT_SIZE);
-  const [fontMenuOpen, setFontMenuOpen] = useState(false);
   // Leitura em voz alta (Web Speech): fala os versículos da tradução em sequência,
   // destacando e rolando até o atual. 'paused' espelha synth.pause/resume.
   const [listening, setListening] = useState(false);
@@ -430,20 +431,22 @@ export function Comparator({
     setFontSize(loadFontSize());
   }, []);
 
-  // Esc fecha o popover de fonte (consistente com os sheets).
+  // Abre a ajuda automaticamente UMA vez por dispositivo (ensina os gestos, que
+  // são invisíveis). Nas próximas visitas, só pelo item "Ajuda" no menu "⋯".
   useEffect(() => {
-    if (!fontMenuOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFontMenuOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [fontMenuOpen]);
+    try {
+      if (!localStorage.getItem(READER_HINT_KEY)) {
+        setHelpOpen(true);
+        localStorage.setItem(READER_HINT_KEY, '1');
+      }
+    } catch {
+      /* localStorage indisponível — apenas não auto-abre */
+    }
+  }, []);
 
   const pickFontSize = (size: ReaderFontSize) => {
     setFontSize(size);
     saveFontSize(size);
-    setFontMenuOpen(false);
   };
 
   // Índice versículo → anotações que o cobrem (faixa verse_start..verse_end), para
@@ -461,9 +464,10 @@ export function Comparator({
     return map;
   }, [annotations]);
 
-  // Limpa o timer do realce ao desmontar, evitando setState após unmount.
+  // Limpa timers pendentes ao desmontar, evitando setState após unmount.
   useEffect(() => () => {
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
   }, []);
 
   // Versículo "atual" da leitura: o mais alto (menor número) que cruza a faixa
@@ -704,6 +708,16 @@ export function Comparator({
   const prev = idx > 0 ? chapters[idx - 1] : null;
   const next = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null;
 
+  // Prefetch dos capítulos adjacentes: aquece o router cache (boundary + segmentos
+  // de corpus já cacheados) para que prev/next — o gesto dominante na leitura
+  // linear — fiquem mais rápidos e com menos flash. codesKey nas deps porque
+  // `codes` é array novo a cada render.
+  useEffect(() => {
+    if (prev != null) router.prefetch(compareHref(book.osis_code, prev, codes));
+    if (next != null) router.prefetch(compareHref(book.osis_code, next, codes));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.osis_code, prev, next, codesKey]);
+
   // Swipe horizontal para trocar de capítulo (gesto natural de "virar página").
   // Critérios: deslocamento horizontal ≥ 70px, dominância horizontal (2× o
   // vertical), fora do modo seleção, sem sheet aberto e sem texto selecionado
@@ -843,8 +857,44 @@ export function Comparator({
       const next = new Set(prev);
       if (next.has(verse)) next.delete(verse);
       else next.add(verse);
+      // Desmarcar o último versículo sai do modo seleção (sem isso, sem o antigo
+      // botão "Cancelar", o usuário ficaria preso com checkboxes e nada selecionado).
+      if (next.size === 0) {
+        setSelectMode(false);
+        return new Set();
+      }
       return next;
     });
+  };
+
+  // Long-press no número do versículo entra no modo seleção e marca aquele verso
+  // (substitui o botão "Selecionar" do header — selecionar é uma ação SOBRE o
+  // texto, então o gesto vive no texto). ~500ms; cancela se rolar (pointermove).
+  const longPressTimer = useRef<number | null>(null);
+  const longPressFired = useRef(false);
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
+
+  const startVersePress = (verse: number, e: ReactPointerEvent) => {
+    longPressFired.current = false;
+    pressOrigin.current = { x: e.clientX, y: e.clientY };
+    longPressTimer.current = window.setTimeout(() => {
+      longPressFired.current = true;
+      if ('vibrate' in navigator) navigator.vibrate?.(10); // dica tátil
+      setSelectMode(true);
+      setSelectedVerses((prev) => new Set(prev).add(verse));
+    }, 500);
+  };
+  const cancelVersePress = () => {
+    if (longPressTimer.current) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+  const moveVersePress = (e: ReactPointerEvent) => {
+    if (!pressOrigin.current) return;
+    if (Math.abs(e.clientX - pressOrigin.current.x) > 10 || Math.abs(e.clientY - pressOrigin.current.y) > 10) {
+      cancelVersePress();
+    }
   };
 
   const exitSelectMode = () => {
@@ -866,7 +916,7 @@ export function Comparator({
           subir. Forçado visível com seleção ativa ou popover de fonte aberto. */}
       <header
         className={`sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/90 px-4 py-2.5 backdrop-blur transition-transform duration-300 dark:border-neutral-800 dark:bg-neutral-950/90 ${
-          headerHidden && !selectMode && !fontMenuOpen ? '-translate-y-full' : ''
+          headerHidden && !selectMode ? '-translate-y-full' : ''
         }`}
       >
         {/* Linha 1 — navegação: voltar + navegador de capítulo centralizado (‹ título ›). */}
@@ -932,96 +982,49 @@ export function Comparator({
           </button>
           <button
             type="button"
-            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-            className={`rounded-md px-2 py-1 transition ${
-              selectMode
-                ? 'bg-amber-100 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100'
-                : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
-            }`}
-            aria-pressed={selectMode}
-            aria-label="Selecionar versículos"
+            onClick={() => setToolsOpen(true)}
+            aria-label="Ferramentas de leitura"
+            className="ml-auto rounded-md px-2 py-1 text-lg leading-none text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
-            {selectMode ? 'Cancelar' : 'Selecionar'}
+            <span aria-hidden>⋯</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setVersionsOpen(true)}
-            className="rounded-md px-2 py-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-            aria-label="Escolher versões"
-          >
-            Versões ({translations.length})
-          </button>
-          <div className="relative ml-auto flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => (listening ? stopListening() : startListening())}
-              aria-label={listening ? 'Parar leitura em voz alta' : 'Ouvir o capítulo'}
-              aria-pressed={listening}
-              className={`rounded-md px-2 py-1 transition hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
-                listening ? 'text-amber-700 dark:text-amber-400' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200'
-              }`}
-            >
-              <span aria-hidden>🔊</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFontMenuOpen((o) => !o)}
-              aria-label="Tamanho da fonte"
-              aria-expanded={fontMenuOpen}
-              className="rounded-md px-2 py-1 font-serif text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-            >
-              Aa
-            </button>
-            <ReaderHelp />
-
-            {/* Popover de tamanho de fonte: opções com pré-visualização do tamanho.
-                O backdrop de fechamento vai por PORTAL ao body — dentro do header
-                (backdrop-blur) um fixed ficaria confinado à caixa do header. */}
-            {fontMenuOpen && (
-              <>
-                {typeof document !== 'undefined' &&
-                  createPortal(
-                    <button
-                      type="button"
-                      aria-label="Fechar"
-                      onClick={() => setFontMenuOpen(false)}
-                      className="fixed inset-0 z-20 cursor-default"
-                    />,
-                    document.body,
-                  )}
-                <div className="absolute right-0 top-full z-30 mt-2 w-44 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-                  {FONT_SIZES.map((s, i) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => pickFontSize(s.value)}
-                      aria-pressed={fontSize === s.value}
-                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
-                        fontSize === s.value
-                          ? 'bg-amber-50 font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'
-                          : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800'
-                      }`}
-                    >
-                      <span style={{ fontSize: 12 + i * 2 }}>{s.label}</span>
-                      {fontSize === s.value && <span aria-hidden>✓</span>}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </header>
 
       <main data-fontsize={fontSize} className={`px-4 py-5 ${selectMode ? 'pb-24' : ''}`}>
-        {/* Cabeçalho de colunas (só desktop): nomes das versões alinhados às colunas. */}
-        <div className="mb-2 hidden sm:grid sm:gap-4" style={gridStyle}>
+        {/* Cabeçalho de colunas (só desktop): nomes das versões alinhados às
+            colunas — e também o atalho para trocar de versão (clica → seletor). */}
+        <button
+          type="button"
+          onClick={() => setVersionsOpen(true)}
+          aria-label="Escolher versões"
+          className="mb-2 hidden w-full text-left sm:grid sm:gap-4"
+          style={gridStyle}
+        >
           {translations.map((t) => (
-            <div key={t.code} className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            <span key={t.code} className="text-xs font-semibold uppercase tracking-wide text-neutral-500 transition hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
               {t.name}
-            </div>
+            </span>
           ))}
-        </div>
+        </button>
+
+        {/* Legenda de versões (só mobile): mostra os nomes UMA vez em vez de
+            repetir o rótulo acima de cada versículo. Também É o atalho para trocar
+            de versão (toca na legenda → seletor) — affordance contextual, ▾ sinaliza. */}
+        <button
+          type="button"
+          onClick={() => setVersionsOpen(true)}
+          aria-label="Escolher versões"
+          className="mb-3 flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md text-left text-[11px] font-semibold uppercase tracking-wide text-muted transition hover:text-neutral-700 dark:hover:text-neutral-200 sm:hidden"
+        >
+          {translations.map((t, i) => (
+            <span key={t.code} className="flex items-center gap-2">
+              {i > 0 && <span aria-hidden className="text-neutral-300 dark:text-neutral-700">·</span>}
+              {t.name}
+            </span>
+          ))}
+          <span aria-hidden className="text-neutral-400">▾</span>
+        </button>
 
         <div className="flex flex-col">
           {rows.map((row) => {
@@ -1085,10 +1088,14 @@ export function Comparator({
                   const showHebrew = originalHebrew != null && originalHebrew.length > 0;
                   return (
                     <div key={t.code} className="mb-2 last:mb-0 sm:mb-0">
-                      {/* Rótulo da versão por bloco (só mobile, pois empilha). */}
-                      <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 sm:hidden">
-                        {t.name}
-                      </span>
+                      {/* Rótulo por versículo só quando há 3+ versões empilhadas no
+                          mobile (aí a legenda do topo não basta para diferenciar).
+                          Com 1-2 versões, a legenda + a fonte do original bastam. */}
+                      {translations.length > 2 && (
+                        <span className="mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted sm:hidden">
+                          {t.name}
+                        </span>
+                      )}
                       <p className="verse-text flex items-start gap-1.5 text-[15px] leading-relaxed">
                         {row.verse === 0 ? (
                           <span className="mt-0.5 select-none text-xs font-semibold text-neutral-500 dark:text-neutral-400">
@@ -1097,8 +1104,21 @@ export function Comparator({
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setCrossRefVerse(row.verse)}
-                            aria-label={`Referências cruzadas do versículo ${row.verse}`}
+                            onClick={() => {
+                              // Suprime o "toque" que vem logo após um long-press
+                              // (senão abriria as referências ao selecionar).
+                              if (longPressFired.current) {
+                                longPressFired.current = false;
+                                return;
+                              }
+                              setCrossRefVerse(row.verse);
+                            }}
+                            onPointerDown={(e) => startVersePress(row.verse, e)}
+                            onPointerUp={cancelVersePress}
+                            onPointerLeave={cancelVersePress}
+                            onPointerMove={moveVersePress}
+                            onContextMenu={(e) => e.preventDefault()}
+                            aria-label={`Versículo ${row.verse}: toque para referências cruzadas, segure para selecionar`}
                             className="mt-0.5 cursor-pointer select-none text-xs font-semibold text-neutral-500 underline decoration-neutral-300 decoration-dotted underline-offset-2 transition hover:text-amber-700 dark:text-neutral-400 dark:decoration-neutral-600 dark:hover:text-amber-400"
                           >
                             {row.verse}
@@ -1263,6 +1283,63 @@ export function Comparator({
           autoCompose={draftAutoCompose}
         />
       )}
+
+      {/* Ferramentas de leitura (menu "⋯"): áudio, tamanho da fonte e ajuda —
+          tirados do header para enxugá-lo. */}
+      {toolsOpen && (
+        <BottomSheet onClose={() => setToolsOpen(false)} ariaLabel="Ferramentas de leitura">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
+            Ferramentas de leitura
+          </h2>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (listening) stopListening();
+              else startListening();
+              setToolsOpen(false);
+            }}
+            className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            <span aria-hidden>🔊</span> {listening ? 'Parar leitura' : 'Ouvir o capítulo'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setToolsOpen(false);
+              setHelpOpen(true);
+            }}
+            className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            <span aria-hidden>?</span> Como usar o leitor
+          </button>
+
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="mb-1.5 text-xs font-medium text-muted">Tamanho da fonte</p>
+            <div className="flex flex-col gap-1">
+              {FONT_SIZES.map((s, i) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => pickFontSize(s.value)}
+                  aria-pressed={fontSize === s.value}
+                  className={`flex min-h-[44px] w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
+                    fontSize === s.value
+                      ? 'bg-amber-50 font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'
+                      : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800'
+                  }`}
+                >
+                  <span style={{ fontSize: 12 + i * 2 }}>{s.label}</span>
+                  {fontSize === s.value && <span aria-hidden>✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </BottomSheet>
+      )}
+
+      <ReaderHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
