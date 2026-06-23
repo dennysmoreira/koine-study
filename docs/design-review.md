@@ -165,3 +165,22 @@ Ordem de consenso: **fundação de experiência antes de SaaS**. Status atualiza
 | 8 | Primitivo `<BottomSheet>` compartilhado + focus trap | VIS-5 | P1 | ✅ Feito — `components/BottomSheet.tsx` (scrim+painel+handle+Escape+**focus trap+retorno de foco**). **7 sheets migrados:** `TokenSheet`, `HebrewWordSheet`, `CrossRefsSheet`, `AnnotationSheet`, picker da `VerseSelectionBar`, `NavSheet` e `VersionsSheet` (Comparator; hook `useEscapeToClose` removido). Verificado no preview (focus trap/retorno de foco/`bg-surface`). **Não migrados de propósito** (layout divergente, exigiriam variantes): `StudyModal` (modal responsivo centralizado no desktop), `ReaderHelp` (usa portal — ADR-0003), `StudyWorkspace` (drawer `lg:hidden` sem handle) |
 | 9 | Camada de design tokens (cores/tipografia/raio) | VIS-4/DS | P1 | 🟡 Foco — camada de tokens semânticos de cor criada via CSS vars (`--surface`/`--surface-muted`/`--muted`/`--line` em `globals.css`, trocadas por tema) + `theme.extend.colors` no Tailwind (`bg-surface`/`text-muted`/`border-line`, sem `dark:`). Migrados os padrões mais repetidos do leitor: `BottomSheet` (`bg-surface`), `TokenSheet`/`HebrewWordSheet` (`text-muted`). Verificado: mesmas cores, sem regressão. **Adoção incremental:** `border-line`/`surface-muted` definidos; migrar demais `bg-white dark:bg-neutral-900` e bordas conforme tocar cada arquivo. Tipografia/raio como tokens fica para etapa futura |
 | — | Hardening multi-tenant, SRS, billing | Produto | — | 📋 Backlog (pré-SaaS) |
+
+---
+
+## Rodada de fluidez (mobile) — leitor "carregado/pesado"
+
+Feedback do usuário (mobile): o app parecia carregado, pouco intuitivo e lento. Diagnóstico no
+app rodando (375px) + remediação, branch `feat/leitor-fluidez`:
+
+| Queixa | Causa medida | Correção | Status |
+|--------|--------------|----------|--------|
+| "Pesado/carregado" | Rótulo de versão repetido **51× por capítulo** (1 por versículo) | Legenda única no topo da leitura; rótulo por-versículo só com 3+ versões | ✅ Feito (51×→1×, verificado) |
+| "Coisa demais / não sei onde olhar" | Header com **6 controles** (Estudo, Selecionar, Versões, 🔊, Aa, ?) | Repensada a interação: header **6→2** (`✨ Estudo` + `⋯`) | ✅ Feito (verificado) |
+| "Selecionar" como modo no header | Botão de modo pouco intuitivo | **Long-press (~500ms) no número do versículo** entra em seleção; remove o botão; auto-sai ao desmarcar tudo; dica tátil; gestos ensinados na ajuda | ✅ Feito (verificado) |
+| Versões ocupava o header | Botão permanente p/ ação ocasional | **Toque na legenda** (mobile) / cabeçalho (desktop) abre o seletor; ▾ sinaliza | ✅ Feito (verificado) |
+| 🔊/Aa/? poluíam o header | 3 ícones permanentes | Menu **"⋯"** (BottomSheet) com Áudio, Tamanho da fonte e Ajuda | ✅ Feito (verificado) |
+| "Lento/travado" | `force-dynamic` + `loading.tsx` = round-trip por capítulo; DOM pesado | **Pendente** — navegação otimista/prefetch de capítulos | ⬜ Próximo |
+
+Notas: `ReaderHelp` virou componente **controlado** (auto-abre 1×/dispositivo via `READER_HINT_KEY`,
+e pelo item "Ajuda" do `⋯`); instruções atualizadas para os gestos novos (✋ segurar, 🔖 legenda).
