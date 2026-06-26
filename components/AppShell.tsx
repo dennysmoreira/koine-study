@@ -11,6 +11,7 @@
  */
 import { usePathname } from 'next/navigation';
 import { BottomNav, isAppChromeHidden } from './BottomNav';
+import { SideRail } from './SideRail';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,7 +19,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className={hideChrome ? undefined : 'pb-[calc(3.5rem+env(safe-area-inset-bottom))]'}>{children}</div>
+      {/* Mobile: BottomNav fixa embaixo (reserva pb). Desktop (lg+): SideRail fixo
+          à esquerda (reserva pl, zera pb). hideChrome (login/share) some com tudo. */}
+      <SideRail />
+      <div
+        className={
+          hideChrome
+            ? undefined
+            : 'pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-60'
+        }
+      >
+        {children}
+      </div>
       <BottomNav />
     </>
   );

@@ -11,22 +11,23 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from '@/app/auth/actions';
 
-interface NavItem {
+export interface NavItem {
   href: string;
   icon: string;
   label: string;
 }
 
-// Abas fixas na barra (as seções mais usadas). "Mais" entra como 5º slot.
-const TABS: NavItem[] = [
+// Abas fixas na barra inferior (as seções mais usadas). "Mais" entra como 5º slot.
+// No desktop o SideRail mostra TABS + MORE juntos (há espaço, sem overflow).
+export const TABS: NavItem[] = [
   { href: '/', icon: '🏛️', label: 'Início' },
   { href: '/compare', icon: '📜', label: 'Ler' },
   { href: '/dictionary', icon: '📚', label: 'Dicionário' },
   { href: '/studies', icon: '✨', label: 'Estudos' },
 ];
 
-// Demais seções, acessíveis pela folha "Mais".
-const MORE: NavItem[] = [
+// Demais seções, acessíveis pela folha "Mais" (mobile) ou direto no trilho (desktop).
+export const MORE: NavItem[] = [
   { href: '/search', icon: '🔍', label: 'Buscar' },
   { href: '/highlights', icon: '🖍️', label: 'Destaques' },
   { href: '/annotations', icon: '📝', label: 'Anotações' },
@@ -36,7 +37,7 @@ const MORE: NavItem[] = [
 
 // Casa a rota atual com um href de seção, considerando sub-rotas
 // (ex.: /compare/John/1 ativa "Ler"; /studies/5 ativa "Estudos").
-function matches(pathname: string, href: string): boolean {
+export function matches(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -90,7 +91,7 @@ export function BottomNav() {
       {/* Folha "Mais": overlay + painel ancorado acima da barra. */}
       {moreOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px] lg:hidden"
           onClick={() => setMoreOpen(false)}
           aria-hidden
         />
@@ -99,7 +100,7 @@ export function BottomNav() {
         <div
           role="menu"
           aria-label="Mais seções"
-          className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-2xl px-3 pb-2"
+          className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-2xl px-3 pb-2 lg:hidden"
         >
           <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
             <div className="grid grid-cols-3 gap-1 p-2">
@@ -139,7 +140,7 @@ export function BottomNav() {
 
       <nav
         aria-label="Navegação principal"
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-neutral-200 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90"
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-neutral-200 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90 lg:hidden"
       >
         <div className="mx-auto flex max-w-2xl items-stretch">
           {TABS.map((item) => {
