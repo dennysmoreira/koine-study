@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { AccountBadge } from '@/components/AccountBadge';
 import { ActivityCard, type Activity } from '@/components/ActivityCard';
+import { InstallButton } from '@/components/InstallButton';
 import { ResumeReading } from '@/components/ResumeReading';
 import { TodayPlanCard } from '@/components/TodayPlanCard';
 import { getBooks } from '@/lib/corpus';
@@ -85,6 +86,8 @@ export default async function HomePage() {
           <AccountBadge />
         </Suspense>
       </header>
+
+      <InstallButton />
 
       <ResumeReading bookNames={bookNames} />
 
